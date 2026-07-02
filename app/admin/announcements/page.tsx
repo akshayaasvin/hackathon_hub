@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '../../../lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { Send, Volume2, Users, Bell } from 'lucide-react'
 
 export default function AdminAnnouncements() {
@@ -84,8 +84,7 @@ export default function AdminAnnouncements() {
         user_id: u.id,
         title: title,
         message: message,
-        type: 'announcement',
-        link: '/'
+        type: 'announcement'
       }))
 
       const { error } = await supabase.from('notifications').insert(notifications)

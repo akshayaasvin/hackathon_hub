@@ -103,6 +103,10 @@ export default function AdminResultsPage() {
         .eq('hackathon_id', selectedHackathon.id)
       
       // Insert new winners & certificates
+      const year = new Date().getFullYear()
+      const genCertificateId = () =>
+        `HH-${year}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+
       for (let i = 0; i < top3.length; i++) {
         const teamId = top3[i].id
         await supabase.from('winners').insert({
@@ -110,7 +114,7 @@ export default function AdminResultsPage() {
           team_id: teamId,
           rank: i + 1,
           prize_amount: prizes[i],
-          announced_at: new Date().toISOString()
+          declared_at: new Date().toISOString()
         })
 
         // Get all members of the winning team
@@ -118,12 +122,13 @@ export default function AdminResultsPage() {
           .from('team_members')
           .select('user_id')
           .eq('team_id', teamId)
-        
+
         if (members && members.length > 0) {
           const certsToInsert = members.map(member => ({
             user_id: member.user_id,
-            team_id: teamId,
             hackathon_id: selectedHackathon.id,
+            certificate_type: 'winner',
+            certificate_id: genCertificateId(),
             issued_at: new Date().toISOString()
           }))
 

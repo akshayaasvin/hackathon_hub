@@ -8,55 +8,6 @@ export async function middleware(request: NextRequest) {
     },
   })
 
-  const mockUserCookie = request.cookies.get('mock_user')
-  const mockUser = mockUserCookie ? JSON.parse(decodeURIComponent(mockUserCookie.value)) : null
-  const isMockAuth = process.env.NEXT_PUBLIC_MOCK_AUTH === 'true' || !!mockUserCookie;
-
-  if (isMockAuth) {
-    const path = request.nextUrl.pathname
-
-    const getDashboardUrl = (r: string) => {
-      if (r === 'admin') return '/admin'
-      if (r === 'jury') return '/jury'
-      if (r === 'college') return '/college'
-      return '/participant'
-    }
-
-    const role = mockUser?.user_metadata?.role || 'participant'
-
-    if (path === '/' || path === '/login' || path === '/register' || path === '/login-simple') {
-      if (mockUser && path !== '/') {
-        return NextResponse.redirect(new URL(getDashboardUrl(role), request.url))
-      }
-      return response
-    }
-
-    if (!mockUser) {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-
-    // Role checks from mock metadata
-    if (path.startsWith('/admin') && role !== 'admin') {
-      return NextResponse.redirect(new URL(getDashboardUrl(role), request.url))
-    }
-
-    if (path.startsWith('/jury') && role !== 'jury') {
-      return NextResponse.redirect(new URL(getDashboardUrl(role), request.url))
-    }
-
-    if (path.startsWith('/college') && role !== 'college') {
-      return NextResponse.redirect(new URL(getDashboardUrl(role), request.url))
-    }
-
-    const participantPaths = ['/participant', '/results', '/certificates', '/profile']
-    const isParticipantPath = participantPaths.some(p => path === p || path.startsWith(p + '/'))
-    if (isParticipantPath && role !== 'participant') {
-      return NextResponse.redirect(new URL(getDashboardUrl(role), request.url))
-    }
-
-    return response
-  }
-
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -91,13 +42,19 @@ export async function middleware(request: NextRequest) {
   }
 
   // Public/Auth routes
-  if (path === '/' || path === '/login' || path === '/register' || path === '/login-simple') {
+  if (path === '/' || path === '/login' || path === '/register') {
     if (user && path !== '/') {
       const { data: userData } = await supabase
         .from('users')
-        .select('role')
+        .select('role, status')
         .eq('id', user.id)
         .single()
+      if (userData?.status === 'pending') {
+        return NextResponse.redirect(new URL('/pending-approval', request.url))
+      }
+      if (userData?.status === 'rejected') {
+        return NextResponse.redirect(new URL('/account-rejected', request.url))
+      }
       const role = userData?.role || 'participant'
       return NextResponse.redirect(new URL(getDashboardUrl(role), request.url))
     }
@@ -109,13 +66,29 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Fetch role
+  // Fetch role + status
   const { data: userData } = await supabase
     .from('users')
-    .select('role')
+    .select('role, status')
     .eq('id', user.id)
     .single()
   const role = userData?.role || 'participant'
+  const status = userData?.status || 'pending'
+
+  if (path === '/pending-approval' || path === '/account-rejected') {
+    if (status === 'active') {
+      return NextResponse.redirect(new URL(getDashboardUrl(role), request.url))
+    }
+    return response
+  }
+
+  if (status === 'pending') {
+    return NextResponse.redirect(new URL('/pending-approval', request.url))
+  }
+
+  if (status === 'rejected') {
+    return NextResponse.redirect(new URL('/account-rejected', request.url))
+  }
 
   // Role Checks
   if (path.startsWith('/admin') && role !== 'admin') {

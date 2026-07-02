@@ -2,18 +2,21 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '../../lib/supabase/client'
-import { User, Mail, Phone, School, GraduationCap, Calendar, Lock, Save } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { User, Mail, Phone, School, GraduationCap, MapPin, Lock, Save } from 'lucide-react'
 
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState({
     full_name: '',
     email: '',
-    phone: '',
     college_name: '',
-    department: '',
-    year_of_study: ''
+    passout_year: '',
+    degree: '',
+    domain: '',
+    experience_level: 'fresher',
+    contact_number: '',
+    address: ''
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -28,7 +31,7 @@ export default function ProfilePage() {
   const loadProfile = async () => {
     try {
       setLoading(true)
-      
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.push('/login')
@@ -36,22 +39,23 @@ export default function ProfilePage() {
       }
       setUser(user)
 
-      // Get profile from users table
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+      const [{ data: userData }, { data: participantData }] = await Promise.all([
+        supabase.from('users').select('*').eq('id', user.id).single(),
+        supabase.from('participant_profiles').select('*').eq('user_id', user.id).maybeSingle()
+      ])
 
       setProfile({
-        full_name: userData?.full_name || user.user_metadata?.full_name || '',
+        full_name: userData?.full_name || '',
         email: user.email || '',
-        phone: userData?.phone || '',
-        college_name: userData?.college_name || '',
-        department: userData?.department || '',
-        year_of_study: userData?.year_of_study || ''
+        college_name: participantData?.college_name || '',
+        passout_year: participantData?.passout_year?.toString() || '',
+        degree: participantData?.degree || '',
+        domain: participantData?.domain || '',
+        experience_level: participantData?.experience_level || 'fresher',
+        contact_number: participantData?.contact_number || '',
+        address: participantData?.address || ''
       })
-      
+
     } catch (error) {
       console.error('Error:', error)
     } finally {
@@ -69,25 +73,34 @@ export default function ProfilePage() {
     setMessage('')
 
     try {
-      const { error } = await supabase
+      const { error: userError } = await supabase
         .from('users')
-        .update({
-          full_name: profile.full_name,
-          phone: profile.phone,
-          college_name: profile.college_name,
-          department: profile.department,
-          year_of_study: profile.year_of_study,
-          updated_at: new Date().toISOString()
-        })
+        .update({ full_name: profile.full_name, updated_at: new Date().toISOString() })
         .eq('id', user.id)
 
-      if (error) throw error
+      if (userError) throw userError
 
-      setMessage('✅ Profile updated successfully!')
+      const { error: profileError } = await supabase
+        .from('participant_profiles')
+        .update({
+          college_name: profile.college_name,
+          passout_year: Number(profile.passout_year),
+          degree: profile.degree,
+          domain: profile.domain,
+          experience_level: profile.experience_level,
+          contact_number: profile.contact_number,
+          address: profile.address,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id)
+
+      if (profileError) throw profileError
+
+      setMessage('Profile updated successfully!')
       setTimeout(() => setMessage(''), 3000)
-      
+
     } catch (error: any) {
-      setMessage('❌ Error: ' + error.message)
+      setMessage('Error: ' + error.message)
     } finally {
       setSaving(false)
     }
@@ -96,22 +109,18 @@ export default function ProfilePage() {
   const handleChangePassword = async () => {
     const newPassword = prompt('Enter new password:')
     if (!newPassword) return
-    
+
     if (newPassword.length < 6) {
       alert('Password must be at least 6 characters')
       return
     }
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      })
-      
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
       if (error) throw error
-      alert('✅ Password changed successfully!')
-      
+      alert('Password changed successfully!')
     } catch (error: any) {
-      alert('❌ Error: ' + error.message)
+      alert('Error: ' + error.message)
     }
   }
 
@@ -122,16 +131,16 @@ export default function ProfilePage() {
   return (
     <div className="premium-container fade-in" style={{ maxWidth: '800px' }}>
       <div style={{ marginBottom: '40px' }}>
-        <h1 style={{ fontSize: '32px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>👤 My Profile</h1>
-        <p style={{ color: 'var(--text-secondary)' }}>Manage your personal details, academic metadata and access passwords.</p>
+        <h1 style={{ fontSize: '32px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>My Profile</h1>
+        <p style={{ color: 'var(--text-secondary)' }}>Manage your personal details, academic information and password.</p>
       </div>
 
       {message && (
         <div className="glass-card" style={{
           padding: '16px 20px',
-          background: message.includes('✅') ? 'var(--success-bg)' : 'var(--danger-bg)',
-          borderLeft: message.includes('✅') ? '4px solid var(--success)' : '4px solid var(--danger)',
-          color: message.includes('✅') ? 'var(--success)' : 'var(--danger)',
+          background: message.startsWith('Error') ? 'var(--danger-bg)' : 'var(--success-bg)',
+          borderLeft: message.startsWith('Error') ? '4px solid var(--danger)' : '4px solid var(--success)',
+          color: message.startsWith('Error') ? 'var(--danger)' : 'var(--success)',
           borderRadius: '12px',
           marginBottom: '28px',
           fontSize: '15px'
@@ -144,7 +153,7 @@ export default function ProfilePage() {
         <h2 style={{ fontSize: '18px', color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '24px' }}>
           Personal Information
         </h2>
-        
+
         <div className="responsive-grid-2" style={{ marginBottom: '20px' }}>
           <div>
             <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
@@ -176,12 +185,12 @@ export default function ProfilePage() {
 
         <div style={{ marginBottom: '32px' }}>
           <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-            <Phone size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} /> Phone Number
+            <Phone size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} /> Contact Number
           </label>
           <input
             type="tel"
-            name="phone"
-            value={profile.phone}
+            name="contact_number"
+            value={profile.contact_number}
             onChange={handleChange}
             placeholder="+1 555-019-2834"
             className="premium-input"
@@ -189,7 +198,7 @@ export default function ProfilePage() {
         </div>
 
         <h2 style={{ fontSize: '18px', color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '24px' }}>
-          Academic Coordinates
+          Academic Information
         </h2>
 
         <div style={{ marginBottom: '20px' }}>
@@ -201,45 +210,84 @@ export default function ProfilePage() {
             name="college_name"
             value={profile.college_name}
             onChange={handleChange}
-            placeholder="Massachusetts Institute of Technology"
+            placeholder="e.g. PSNA College of Engineering"
             className="premium-input"
           />
         </div>
 
-        <div className="responsive-grid-2" style={{ marginBottom: '32px' }}>
+        <div className="responsive-grid-2" style={{ marginBottom: '20px' }}>
           <div>
             <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-              <GraduationCap size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} /> Major / Department
+              <GraduationCap size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} /> Degree
             </label>
             <input
               type="text"
-              name="department"
-              value={profile.department}
+              name="degree"
+              value={profile.degree}
               onChange={handleChange}
-              placeholder="Computer Science"
+              placeholder="e.g. B.Tech"
               className="premium-input"
             />
           </div>
 
           <div>
             <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-              <Calendar size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} /> Year of Study
+              Domain / Branch
+            </label>
+            <input
+              type="text"
+              name="domain"
+              value={profile.domain}
+              onChange={handleChange}
+              placeholder="e.g. Computer Science"
+              className="premium-input"
+            />
+          </div>
+        </div>
+
+        <div className="responsive-grid-2" style={{ marginBottom: '32px' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+              Passout Year
+            </label>
+            <input
+              type="number"
+              name="passout_year"
+              value={profile.passout_year}
+              onChange={handleChange}
+              placeholder="2026"
+              className="premium-input"
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+              Experience Level
             </label>
             <select
-              name="year_of_study"
-              value={profile.year_of_study}
+              name="experience_level"
+              value={profile.experience_level}
               onChange={handleChange}
               className="premium-input premium-select"
             >
-              <option value="">Select Year</option>
-              <option value="1st Year">1st Year</option>
-              <option value="2nd Year">2nd Year</option>
-              <option value="3rd Year">3rd Year</option>
-              <option value="4th Year">4th Year</option>
-              <option value="Graduate">Graduate</option>
-              <option value="Post Graduate">Post Graduate</option>
+              <option value="fresher">Fresher</option>
+              <option value="experienced">Experienced</option>
             </select>
           </div>
+        </div>
+
+        <div style={{ marginBottom: '32px' }}>
+          <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+            <MapPin size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} /> Address
+          </label>
+          <input
+            type="text"
+            name="address"
+            value={profile.address}
+            onChange={handleChange}
+            placeholder="City, State"
+            className="premium-input"
+          />
         </div>
 
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
@@ -251,7 +299,7 @@ export default function ProfilePage() {
           >
             <Save size={16} /> {saving ? 'Saving...' : 'Save Profile Changes'}
           </button>
-          
+
           <button
             type="button"
             onClick={handleChangePassword}

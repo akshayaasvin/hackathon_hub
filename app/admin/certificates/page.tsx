@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '../../../lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { Award, Search, User, Calendar, ExternalLink } from 'lucide-react'
 
 export default function AdminCertificatesPage() {
@@ -17,20 +17,17 @@ export default function AdminCertificatesPage() {
   const loadCertificates = async () => {
     try {
       setLoading(true)
-      const [certsRes, teamsRes, hacksRes, usersRes] = await Promise.all([
+      const [certsRes, hacksRes, usersRes] = await Promise.all([
         supabase.from('certificates').select('*'),
-        supabase.from('teams').select('*'),
         supabase.from('hackathons').select('*'),
         supabase.from('users').select('*')
       ])
 
       const certsData = certsRes.data || []
-      const teamsData = teamsRes.data || []
       const hacksData = hacksRes.data || []
       const usersData = usersRes.data || []
 
       const joined = certsData.map(cert => {
-        const team = teamsData.find((t: any) => t.id === cert.team_id)
         const hackathon = hacksData.find((h: any) => h.id === cert.hackathon_id)
         const user = usersData.find((u: any) => u.id === cert.user_id)
 
@@ -38,7 +35,6 @@ export default function AdminCertificatesPage() {
           ...cert,
           userName: user ? user.full_name : 'Unknown Student',
           userEmail: user ? user.email : '',
-          teamName: team ? team.team_name : 'Unknown Team',
           hackathonName: hackathon ? hackathon.name : 'Unknown Hackathon'
         }
       })
@@ -51,9 +47,9 @@ export default function AdminCertificatesPage() {
     }
   }
 
-  const filtered = certificates.filter(c => 
+  const filtered = certificates.filter(c =>
     c.userName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.teamName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.certificate_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.hackathonName?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
@@ -87,7 +83,7 @@ export default function AdminCertificatesPage() {
             <tr>
               <th>Certificate ID</th>
               <th>Recipient Student</th>
-              <th>Team Name</th>
+              <th>Type</th>
               <th>Hackathon Name</th>
               <th>Issued Date</th>
             </tr>
@@ -101,13 +97,13 @@ export default function AdminCertificatesPage() {
               filtered.map((c) => (
                 <tr key={c.id}>
                   <td style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    {c.id.substring(0, 8)}...
+                    {c.certificate_id}
                   </td>
                   <td>
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{c.userName}</div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{c.userEmail}</div>
                   </td>
-                  <td>{c.teamName}</td>
+                  <td style={{ textTransform: 'capitalize' }}>{c.certificate_type}</td>
                   <td>{c.hackathonName}</td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>

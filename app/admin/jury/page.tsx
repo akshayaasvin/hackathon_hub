@@ -1,32 +1,64 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '../../../lib/supabase/client'
-import { Plus, Trash2, Gavel, Mail, User } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { Plus, Gavel, Mail, User, Trash2 } from 'lucide-react'
+import { adminCreateJurySchema } from '@/lib/validation'
 
 export default function AdminJuryPage() {
   const [juryList, setJuryList] = useState<any[]>([])
+  const [hackathons, setHackathons] = useState<any[]>([])
+  const [teams, setTeams] = useState<any[]>([])
+  const [assignments, setAssignments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [formData, setFormData] = useState({
-    email: '',
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const [assignHackathonId, setAssignHackathonId] = useState('')
+  const [assignTeamId, setAssignTeamId] = useState('')
+  const [assignJudgeId, setAssignJudgeId] = useState('')
+
+  const emptyForm = {
     full_name: '',
-    password: 'password'
-  })
+    contact_number: '',
+    email: '',
+    official_email: '',
+    organization_name: '',
+    portfolio_url: '',
+    occupation: '',
+    experience_years: '',
+    date_of_birth: '',
+    location: '',
+    password: '',
+  }
+  const [formData, setFormData] = useState(emptyForm)
 
   const supabase = createClient()
 
   useEffect(() => {
-    loadJury()
+    loadAll()
   }, [])
 
-  const loadJury = async () => {
+  const loadAll = async () => {
     try {
       setLoading(true)
-      const { data } = await supabase.from('users').select('*')
-      const jury = (data || []).filter((u: any) => u && u.role === 'jury' && u.email && u.full_name)
-      setJuryList(jury)
+      const [usersRes, hackathonsRes, teamsRes, assignmentsRes] = await Promise.all([
+        supabase.from('users').select('*').eq('role', 'jury'),
+        supabase.from('hackathons').select('*').order('created_at', { ascending: false }),
+        supabase.from('teams').select('*'),
+        supabase.from('judge_assignments').select('*'),
+      ])
+
+      const userList = usersRes.data || []
+      const { data: profiles } = userList.length
+        ? await supabase.from('jury_profiles').select('*').in('user_id', userList.map((u) => u.id))
+        : { data: [] as any[] }
+
+      setJuryList(userList.map((u) => ({ ...u, profile: (profiles || []).find((p) => p.user_id === u.id) || null })))
+      setHackathons(hackathonsRes.data || [])
+      setTeams(teamsRes.data || [])
+      setAssignments(assignmentsRes.data || [])
     } catch (e) {
       console.error(e)
     } finally {
@@ -36,60 +68,60 @@ export default function AdminJuryPage() {
 
   const handleAddJury = async (e: React.FormEvent) => {
     e.preventDefault()
-    setActionLoading(true)
-
-    const email = formData.email.trim()
-    const fullName = formData.full_name.trim()
-    const password = formData.password.trim()
-
-    if (!email || !fullName || !password) {
-      alert('All fields are required.')
-      setActionLoading(false)
+    const parsed = adminCreateJurySchema.safeParse({ role: 'jury', ...formData })
+    if (!parsed.success) {
+      const fieldErrors: Record<string, string> = {}
+      for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message
+      setErrors(fieldErrors)
       return
     }
+    setErrors({})
+    setActionLoading(true)
+    try {
+      const res = await fetch('/api/admin/create-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(parsed.data),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Could not create jury account')
+      alert('Jury account created and activated.')
+      setFormData(emptyForm)
+      setShowAddModal(false)
+      await loadAll()
+    } catch (err: any) {
+      alert('Error: ' + err.message)
+    } finally {
+      setActionLoading(false)
+    }
+  }
 
-    // Insert user into mock store (since NEXT_PUBLIC_MOCK_AUTH is true)
-    // We can use supabase.auth.signUp or insert directly into users table
-    const { data, error } = await supabase.auth.signUp({
-      email: email,
-      password: password,
-      options: {
-        data: {
-          full_name: fullName,
-          role: 'jury'
-        }
-      }
+  const handleAssign = async () => {
+    if (!assignHackathonId || !assignTeamId || !assignJudgeId) {
+      alert('Pick a hackathon, team, and jury member first.')
+      return
+    }
+    setActionLoading(true)
+    const { error } = await supabase.from('judge_assignments').insert({
+      hackathon_id: assignHackathonId,
+      team_id: assignTeamId,
+      judge_id: assignJudgeId,
     })
-
     if (error) {
       alert('Error: ' + error.message)
     } else {
-      // Also insert into users table just in case
-      await supabase.from('users').insert({
-        id: data.user?.id || Math.random().toString(36).substring(2, 9),
-        email: email,
-        full_name: fullName,
-        role: 'jury',
-        created_at: new Date().toISOString()
-      })
-      alert('Jury member created successfully!')
-      setFormData({ email: '', full_name: '', password: 'password' })
-      setShowAddModal(false)
-      loadJury()
+      setAssignTeamId('')
+      setAssignJudgeId('')
+      await loadAll()
     }
     setActionLoading(false)
   }
 
-  const handleDeleteJury = async (juryId: string) => {
-    if (!confirm('Are you sure you want to remove this jury member?')) return
+  const handleUnassign = async (id: string) => {
     setActionLoading(true)
-    const { error } = await supabase.from('users').delete().eq('id', juryId)
-    if (error) {
-      alert('Error: ' + error.message)
-    } else {
-      alert('Jury member removed successfully!')
-      loadJury()
-    }
+    const { error } = await supabase.from('judge_assignments').delete().eq('id', id)
+    if (error) alert('Error: ' + error.message)
+    await loadAll()
     setActionLoading(false)
   }
 
@@ -97,33 +129,38 @@ export default function AdminJuryPage() {
     return <div style={{ padding: '100px 20px', textAlign: 'center', fontSize: '18px', color: 'var(--text-secondary)' }}>Loading Jury Panel...</div>
   }
 
+  const teamsForHackathon = teams.filter((t) => t.hackathon_id === assignHackathonId)
+
   return (
     <div className="premium-container fade-in" style={{ padding: '40px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
         <div>
-          <h1 style={{ fontSize: '32px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>⚖️ Jury Panel</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Manage hackathon jury members, promote users, and audit grading permissions.</p>
+          <h1 style={{ fontSize: '32px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>Jury Panel</h1>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            Jury who self-registered are approved via Account Approvals. Use "Add Jury Member" to directly
+            onboard one, and assign jury to teams below.
+          </p>
         </div>
         <button onClick={() => setShowAddModal(true)} className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
           <Plus size={18} /> Add Jury Member
         </button>
       </div>
 
-      {/* Jury List Table */}
-      <div className="table-container fade-in">
+      <div className="table-container fade-in" style={{ marginBottom: '48px' }}>
         <table className="premium-table">
           <thead>
             <tr>
               <th>Name</th>
               <th>Email</th>
-              <th>Joined Date</th>
-              <th>Actions</th>
+              <th>Occupation</th>
+              <th>Status</th>
+              <th>Joined</th>
             </tr>
           </thead>
           <tbody>
             {juryList.length === 0 ? (
               <tr>
-                <td colSpan={4} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No jury members registered.</td>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No jury members registered.</td>
               </tr>
             ) : (
               juryList.map((j) => (
@@ -142,10 +179,69 @@ export default function AdminJuryPage() {
                       {j.email}
                     </div>
                   </td>
-                  <td>{j.created_at && !isNaN(Date.parse(j.created_at)) ? new Date(j.created_at).toLocaleDateString() : 'N/A'}</td>
+                  <td>{j.profile?.occupation || '-'}</td>
                   <td>
-                    <button onClick={() => handleDeleteJury(j.id)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '13px', color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.2)' }} title="Remove Panel Access">
-                      <Trash2 size={14} style={{ display: 'inline', marginRight: '4px' }} /> Remove
+                    <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, background: j.status === 'active' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)', color: j.status === 'active' ? 'var(--success)' : 'var(--warning)' }}>
+                      {j.status.toUpperCase()}
+                    </span>
+                  </td>
+                  <td>{new Date(j.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <h2 style={{ fontSize: '22px', marginBottom: '8px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Gavel size={20} /> Judge Assignments
+      </h2>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '20px' }}>Assign jury members to teams so they only see the submissions they're evaluating.</p>
+
+      <div className="glass-card" style={{ padding: '24px', marginBottom: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+          <select className="premium-input premium-select" value={assignHackathonId} onChange={(e) => { setAssignHackathonId(e.target.value); setAssignTeamId('') }}>
+            <option value="">Select hackathon</option>
+            {hackathons.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+          </select>
+          <select className="premium-input premium-select" value={assignTeamId} onChange={(e) => setAssignTeamId(e.target.value)} disabled={!assignHackathonId}>
+            <option value="">Select team</option>
+            {teamsForHackathon.map((t) => <option key={t.id} value={t.id}>{t.team_name}</option>)}
+          </select>
+          <select className="premium-input premium-select" value={assignJudgeId} onChange={(e) => setAssignJudgeId(e.target.value)}>
+            <option value="">Select jury member</option>
+            {juryList.filter((j) => j.status === 'active').map((j) => <option key={j.id} value={j.id}>{j.full_name}</option>)}
+          </select>
+        </div>
+        <button onClick={handleAssign} disabled={actionLoading} className="btn btn-primary" style={{ padding: '10px 20px' }}>
+          Assign
+        </button>
+      </div>
+
+      <div className="table-container fade-in">
+        <table className="premium-table">
+          <thead>
+            <tr>
+              <th>Hackathon</th>
+              <th>Team</th>
+              <th>Jury Member</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {assignments.length === 0 ? (
+              <tr>
+                <td colSpan={4} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No assignments yet.</td>
+              </tr>
+            ) : (
+              assignments.map((a) => (
+                <tr key={a.id}>
+                  <td>{hackathons.find((h) => h.id === a.hackathon_id)?.name || '-'}</td>
+                  <td>{teams.find((t) => t.id === a.team_id)?.team_name || '-'}</td>
+                  <td>{juryList.find((j) => j.id === a.judge_id)?.full_name || '-'}</td>
+                  <td>
+                    <button onClick={() => handleUnassign(a.id)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '13px', color: 'var(--danger)' }}>
+                      <Trash2 size={14} />
                     </button>
                   </td>
                 </tr>
@@ -155,46 +251,40 @@ export default function AdminJuryPage() {
         </table>
       </div>
 
-      {/* Add Jury Modal */}
       {showAddModal && (
         <div className="modal-overlay">
-          <div className="glass-card fade-in" style={{ width: '100%', maxWidth: '440px', padding: '32px' }}>
+          <div className="glass-card fade-in" style={{ width: '100%', maxWidth: '640px', padding: '32px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h2 style={{ fontSize: '20px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>Add Jury Member</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>Register a new judge account with evaluation permissions.</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
+              This activates the account immediately — no approval step needed.
+            </p>
 
             <form onSubmit={handleAddJury}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>Full Name *</label>
-                  <input 
-                    value={formData.full_name} 
-                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} 
-                    required 
-                    className="premium-input"
-                    placeholder="e.g. Dr. John Doe"
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>Email Address *</label>
-                  <input 
-                    type="email"
-                    value={formData.email} 
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })} 
-                    required 
-                    className="premium-input"
-                    placeholder="e.g. judge@test.com"
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>Password *</label>
-                  <input 
-                    type="password"
-                    value={formData.password} 
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })} 
-                    required 
-                    className="premium-input"
-                  />
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                {([
+                  ['full_name', 'Full Name', 'text'],
+                  ['contact_number', 'Contact Number', 'text'],
+                  ['email', 'Email ID', 'email'],
+                  ['official_email', 'Official Email ID', 'email'],
+                  ['organization_name', 'Organization Name', 'text'],
+                  ['portfolio_url', 'Portfolio / Website', 'text'],
+                  ['occupation', 'Occupation', 'text'],
+                  ['experience_years', 'Years of Experience', 'number'],
+                  ['date_of_birth', 'Date of Birth', 'date'],
+                  ['location', 'Location', 'text'],
+                  ['password', 'Password', 'password'],
+                ] as const).map(([key, label, type]) => (
+                  <div key={key}>
+                    <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{label}</label>
+                    <input
+                      type={type}
+                      className="premium-input"
+                      value={(formData as any)[key]}
+                      onChange={(e) => setFormData({ ...formData, [key]: e.target.value })}
+                    />
+                    {errors[key] && <div style={{ color: 'var(--danger)', fontSize: '12px', marginTop: '4px' }}>{errors[key]}</div>}
+                  </div>
+                ))}
               </div>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>

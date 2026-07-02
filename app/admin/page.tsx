@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '../../lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Plus, Check, Play, Edit3, Calendar, Users, DollarSign, Layers, CheckSquare, FileSpreadsheet, Send, School, Gavel, Trophy, Megaphone } from 'lucide-react'
-import { withTimeout } from '../../lib/utils'
+import { Plus, Play, Calendar, Users, Layers, CheckSquare, FileSpreadsheet, Send, School, Gavel, Trophy, Megaphone } from 'lucide-react'
+import { withTimeout } from '@/lib/utils'
 
 export default function AdminDashboard() {
   const [showForm, setShowForm] = useState(false)
@@ -26,13 +26,16 @@ export default function AdminDashboard() {
     name: '',
     description: '',
     theme: '',
+    rules: '',
+    eligibility: '',
+    prize_details: '',
     start_date: '',
     end_date: '',
     registration_deadline: '',
-    registration_fee: 0,
     max_team_size: 5
   })
-  
+
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const supabase = createClient()
   const router = useRouter()
 
@@ -64,6 +67,8 @@ export default function AdminDashboard() {
         router.push('/participant')
         return
       }
+
+      setCurrentUserId(user.id)
 
       // Fetch hackathons, registrations and teams in parallel with 5s timeout
       const [hackathonsRes, pendingRes, teamsRes] = await withTimeout(
@@ -114,12 +119,15 @@ export default function AdminDashboard() {
       name: formData.name,
       description: formData.description,
       theme: formData.theme,
+      rules: formData.rules || null,
+      eligibility: formData.eligibility || null,
+      prize_details: formData.prize_details || null,
       start_date: startDate,
       end_date: endDate,
       registration_deadline: regDeadline,
-      registration_fee: Number(formData.registration_fee),
       max_team_size: Number(formData.max_team_size),
-      status: 'draft'
+      status: 'draft',
+      created_by: currentUserId,
     })
 
     if (error) {
@@ -131,10 +139,12 @@ export default function AdminDashboard() {
         name: '',
         description: '',
         theme: '',
+        rules: '',
+        eligibility: '',
+        prize_details: '',
         start_date: '',
         end_date: '',
         registration_deadline: '',
-        registration_fee: 0,
         max_team_size: 5
       })
       loadDashboardData()
@@ -390,29 +400,55 @@ export default function AdminDashboard() {
               </div>
             </div>
             
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Rules</label>
+              <textarea
+                name="rules"
+                value={formData.rules}
+                onChange={handleChange}
+                rows={2}
+                className="premium-input"
+                placeholder="Team size limits, allowed tools, judging window..."
+              />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Eligibility</label>
+              <textarea
+                name="eligibility"
+                value={formData.eligibility}
+                onChange={handleChange}
+                rows={2}
+                className="premium-input"
+                placeholder="Who can participate..."
+              />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Prize Details</label>
+              <textarea
+                name="prize_details"
+                value={formData.prize_details}
+                onChange={handleChange}
+                rows={2}
+                className="premium-input"
+                placeholder="1st place, 2nd place, mentorship perks..."
+              />
+            </div>
+
             <div className="responsive-grid-2" style={{ marginBottom: '28px' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Registration Fee ($)</label>
-                <input 
-                  type="number" 
-                  name="registration_fee" 
-                  value={formData.registration_fee} 
-                  onChange={handleChange} 
-                  className="premium-input" 
-                />
-              </div>
-              <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Max Team Size</label>
-                <input 
-                  type="number" 
-                  name="max_team_size" 
-                  value={formData.max_team_size} 
-                  onChange={handleChange} 
-                  className="premium-input" 
+                <input
+                  type="number"
+                  name="max_team_size"
+                  value={formData.max_team_size}
+                  onChange={handleChange}
+                  className="premium-input"
                 />
               </div>
             </div>
-            
+
             <div style={{ display: 'flex', gap: '12px' }}>
               <button 
                 type="submit" 
@@ -442,7 +478,6 @@ export default function AdminDashboard() {
               <th>Name</th>
               <th>Theme</th>
               <th>Deadline</th>
-              <th>Fee</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -450,7 +485,7 @@ export default function AdminDashboard() {
           <tbody>
             {hackathons.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No hackathons configured yet.</td>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No hackathons configured yet.</td>
               </tr>
             ) : (
               hackathons.map((h) => {
@@ -469,7 +504,6 @@ export default function AdminDashboard() {
                     </td>
                     <td>{h.theme || '-'}</td>
                     <td>{new Date(h.registration_deadline).toLocaleDateString()}</td>
-                    <td>{h.registration_fee > 0 ? `$${h.registration_fee}` : 'Free'}</td>
                     <td>
                       <span style={{
                         padding: '4px 10px',

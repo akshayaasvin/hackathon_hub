@@ -39,17 +39,17 @@ export default function NotificationBell() {
       .limit(20)
 
     setNotifications(data || [])
-    setUnreadCount(data?.filter(n => !n.is_read).length || 0)
+    setUnreadCount(data?.filter(n => !n.read).length || 0)
   }
 
   const markAsRead = async (id: string) => {
     await supabase
       .from('notifications')
-      .update({ is_read: true })
+      .update({ read: true })
       .eq('id', id)
     
     setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, is_read: true } : n)
+      prev.map(n => n.id === id ? { ...n, read: true } : n)
     )
     setUnreadCount(prev => Math.max(0, prev - 1))
   }
@@ -60,11 +60,11 @@ export default function NotificationBell() {
 
     await supabase
       .from('notifications')
-      .update({ is_read: true })
+      .update({ read: true })
       .eq('user_id', user.id)
-      .eq('is_read', false)
+      .eq('read', false)
 
-    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
     setUnreadCount(0)
   }
 
@@ -126,7 +126,7 @@ export default function NotificationBell() {
                 style={{
                   padding: '12px',
                   borderBottom: '1px solid #eee',
-                  background: notif.is_read ? 'white' : '#f0f7ff',
+                  background: notif.read ? 'white' : '#f0f7ff',
                   cursor: 'pointer'
                 }}
               >

@@ -30,28 +30,13 @@ export default function AdminSubmissionsPage() {
       const joined = subsData.map(sub => {
         const team = teamsData.find((t: any) => t.id === sub.team_id)
         const hackathon = hacksData.find((h: any) => h.id === sub.hackathon_id || h.id === team?.hackathon_id)
-        
-        // Parse PPT & PDF from JSON-serialized ppt_url field
-        let ppt = ''
-        let pdf = ''
-        try {
-          if (sub.ppt_url && sub.ppt_url.startsWith('{')) {
-            const parsed = JSON.parse(sub.ppt_url)
-            ppt = parsed.ppt || ''
-            pdf = parsed.pdf || ''
-          } else {
-            ppt = sub.ppt_url || ''
-          }
-        } catch (e) {
-          ppt = sub.ppt_url || ''
-        }
 
         return {
           ...sub,
           teamName: team ? team.team_name : 'Unknown Team',
           hackathonName: hackathon ? hackathon.name : 'Unknown Hackathon',
-          ppt,
-          pdf
+          ppt: sub.ppt_url || '',
+          pdf: sub.report_pdf_url || ''
         }
       })
 
@@ -118,7 +103,7 @@ export default function AdminSubmissionsPage() {
                   <td>
                     <div style={{ fontWeight: 600, color: 'var(--primary)' }}>{sub.project_title}</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '400px', wordBreak: 'break-word' }}>
-                      {sub.project_description || 'No description'}
+                      {sub.solution || sub.problem_statement || 'No description'}
                     </div>
                   </td>
                   <td>

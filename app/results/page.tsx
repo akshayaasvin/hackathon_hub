@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '../../lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { Trophy, ArrowLeft, Award, Sparkles } from 'lucide-react'
 
 export default function ResultsPage() {
@@ -67,8 +67,8 @@ export default function ResultsPage() {
         evaluations (
           innovation_score,
           technical_score,
-          impact_score,
           ux_score,
+          feasibility_score,
           presentation_score,
           total_score,
           feedback
@@ -123,6 +123,9 @@ export default function ResultsPage() {
       .eq('hackathon_id', selectedHackathon.id)
     
     // Insert new winners & certificates
+    const year = new Date().getFullYear()
+    const genCertificateId = () => `HH-${year}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
+
     for (let i = 0; i < top3.length; i++) {
       const teamId = top3[i].id
       await supabase.from('winners').insert({
@@ -130,7 +133,7 @@ export default function ResultsPage() {
         team_id: teamId,
         rank: i + 1,
         prize_amount: prizes[i],
-        announced_at: new Date().toISOString()
+        declared_at: new Date().toISOString()
       })
 
       // Get all members of the winning team
@@ -138,12 +141,13 @@ export default function ResultsPage() {
         .from('team_members')
         .select('user_id')
         .eq('team_id', teamId)
-      
+
       if (members && members.length > 0) {
         const certsToInsert = members.map(member => ({
           user_id: member.user_id,
-          team_id: teamId,
           hackathon_id: selectedHackathon.id,
+          certificate_type: 'winner',
+          certificate_id: genCertificateId(),
           issued_at: new Date().toISOString()
         }))
 

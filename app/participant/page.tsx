@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '../../lib/supabase/client'
-import { Trophy, Calendar, Users, FileText, Send, Sparkles, Plus, PlusCircle, CheckCircle, Clock } from 'lucide-react'
-import { withTimeout } from '../../lib/utils'
+import { createClient } from '@/lib/supabase/client'
+import { Calendar, Users, Send, PlusCircle, CheckCircle, Clock } from 'lucide-react'
+import { withTimeout } from '@/lib/utils'
 
 export default function ParticipantDashboard() {
   const [user, setUser] = useState<any>(null)
@@ -34,11 +34,13 @@ export default function ParticipantDashboard() {
   
   const [submissionForm, setSubmissionForm] = useState({
     project_title: '',
-    project_description: '',
+    problem_statement: '',
+    solution: '',
+    features: '',
     repo_link: '',
     demo_video_url: '',
     ppt_url: '',
-    pdf_url: ''
+    report_pdf_url: ''
   })
   
   const router = useRouter()
@@ -64,7 +66,7 @@ export default function ParticipantDashboard() {
       const [hackathonsRes, registrationsRes, teamsRes] = await withTimeout(
         Promise.all([
           supabase.from('hackathons').select('*').eq('status', 'published'),
-          supabase.from('registrations').select('hackathon_id, registration_status, payment_status').eq('user_id', user.id),
+          supabase.from('registrations').select('hackathon_id, registration_status').eq('user_id', user.id),
           supabase.from('teams').select('*, hackathons(name)').eq('team_lead_id', user.id)
         ]),
         5000
@@ -83,10 +85,7 @@ export default function ParticipantDashboard() {
 
       const statusMap = new Map()
       for (const reg of registrations) {
-        statusMap.set(reg.hackathon_id, {
-          registration: reg.registration_status,
-          payment: reg.payment_status
-        })
+        statusMap.set(reg.hackathon_id, { registration: reg.registration_status })
       }
       setRegistrationStatus(statusMap)
 
@@ -132,14 +131,13 @@ export default function ParticipantDashboard() {
     const { error } = await supabase.from('registrations').insert({
       hackathon_id: hackathonId,
       user_id: user?.id,
-      registration_status: 'pending',
-      payment_status: 'pending'
+      registration_status: 'confirmed'
     })
-    
+
     if (error) {
       alert('Registration failed: ' + error.message)
     } else {
-      alert('Successfully registered! Your application is pending admin approval.')
+      alert("You're registered! You can now form a team.")
       loadData()
     }
     setActionLoading(false)
@@ -273,24 +271,22 @@ export default function ParticipantDashboard() {
     }
     
     setActionLoading(true)
-    
-    // Serialize PPT & PDF URLs inside ppt_url database column as JSON
-    const serializedPptUrl = JSON.stringify({
-      ppt: submissionForm.ppt_url,
-      pdf: submissionForm.pdf_url
-    })
-    
+
     const { error } = await supabase.from('submissions').insert({
       team_id: selectedTeam.id,
       hackathon_id: selectedHackathon?.id,
       project_title: submissionForm.project_title,
-      project_description: submissionForm.project_description,
+      problem_statement: submissionForm.problem_statement,
+      solution: submissionForm.solution,
+      features: submissionForm.features,
       repo_link: submissionForm.repo_link,
       demo_video_url: submissionForm.demo_video_url,
-      ppt_url: serializedPptUrl,
-      status: 'submitted'
+      ppt_url: submissionForm.ppt_url,
+      report_pdf_url: submissionForm.report_pdf_url,
+      status: 'submitted',
+      submitted_at: new Date().toISOString()
     })
-    
+
     if (error) {
       alert('Error: ' + error.message)
     } else {
@@ -298,11 +294,13 @@ export default function ParticipantDashboard() {
       setShowSubmitModal(false)
       setSubmissionForm({
         project_title: '',
-        project_description: '',
+        problem_statement: '',
+        solution: '',
+        features: '',
         repo_link: '',
         demo_video_url: '',
         ppt_url: '',
-        pdf_url: ''
+        report_pdf_url: ''
       })
       loadData()
     }
@@ -316,9 +314,9 @@ export default function ParticipantDashboard() {
     if (status.registration === 'confirmed') {
       return { text: 'Confirmed', color: 'var(--success)', bg: 'var(--success-bg)', border: '1px solid var(--success-border)', icon: <CheckCircle size={14} /> }
     } else if (status.registration === 'pending') {
-      return { text: 'Pending Approval', color: 'var(--warning)', bg: 'var(--warning-bg)', border: '1px solid var(--warning-border)', icon: <Clock size={14} /> }
+      return { text: 'Pending', color: 'var(--warning)', bg: 'var(--warning-bg)', border: '1px solid var(--warning-border)', icon: <Clock size={14} /> }
     } else {
-      return { text: 'Rejected', color: 'var(--danger)', bg: 'var(--danger-bg)', border: '1px solid var(--danger-border)', icon: null }
+      return { text: 'Cancelled', color: 'var(--danger)', bg: 'var(--danger-bg)', border: '1px solid var(--danger-border)', icon: null }
     }
   }
 
@@ -459,7 +457,7 @@ export default function ParticipantDashboard() {
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>
                     <p><strong>Theme:</strong> <span style={{ color: 'var(--text-primary)' }}>{hackathon.theme || 'Open Innovation'}</span></p>
-                    <p><strong>Registration Fee:</strong> <span style={{ color: hackathon.registration_fee > 0 ? 'var(--warning)' : 'var(--success)' }}>{hackathon.registration_fee > 0 ? `$${hackathon.registration_fee}` : 'Free'}</span></p>
+                    <p><strong>Registration Deadline:</strong> {new Date(hackathon.registration_deadline).toLocaleDateString()}</p>
                     <p><strong>Max Team Limit:</strong> {hackathon.max_team_size} members</p>
                   </div>
                 </div>
@@ -605,16 +603,38 @@ export default function ParticipantDashboard() {
               </div>
               
               <div>
-                <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Description & Solution Stack</label>
-                <textarea 
-                  placeholder="Highlight key features, technology stack, and architectures used..." 
-                  value={submissionForm.project_description} 
-                  onChange={(e) => setSubmissionForm({...submissionForm, project_description: e.target.value})} 
-                  rows={4} 
-                  className="premium-input" 
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Problem Statement</label>
+                <textarea
+                  placeholder="What problem are you solving?"
+                  value={submissionForm.problem_statement}
+                  onChange={(e) => setSubmissionForm({...submissionForm, problem_statement: e.target.value})}
+                  rows={2}
+                  className="premium-input"
                 />
               </div>
-              
+
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Solution & Tech Stack</label>
+                <textarea
+                  placeholder="Highlight your approach, technology stack, and architecture..."
+                  value={submissionForm.solution}
+                  onChange={(e) => setSubmissionForm({...submissionForm, solution: e.target.value})}
+                  rows={4}
+                  className="premium-input"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Key Features</label>
+                <textarea
+                  placeholder="List the standout features of your project..."
+                  value={submissionForm.features}
+                  onChange={(e) => setSubmissionForm({...submissionForm, features: e.target.value})}
+                  rows={2}
+                  className="premium-input"
+                />
+              </div>
+
               <div>
                 <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px' }}>GitHub / Repository Link</label>
                 <input 
@@ -650,12 +670,12 @@ export default function ParticipantDashboard() {
 
               <div>
                 <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px' }}>PDF / Documentation Link</label>
-                <input 
-                  type="url" 
-                  placeholder="e.g. Project report document PDF link" 
-                  value={submissionForm.pdf_url} 
-                  onChange={(e) => setSubmissionForm({...submissionForm, pdf_url: e.target.value})} 
-                  className="premium-input" 
+                <input
+                  type="url"
+                  placeholder="e.g. Project report document PDF link"
+                  value={submissionForm.report_pdf_url}
+                  onChange={(e) => setSubmissionForm({...submissionForm, report_pdf_url: e.target.value})}
+                  className="premium-input"
                 />
               </div>
             </div>

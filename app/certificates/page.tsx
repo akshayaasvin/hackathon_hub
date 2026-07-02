@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '../../lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { Award, Download, ShieldCheck, Calendar, Sparkles } from 'lucide-react'
 
 export default function CertificatesPage() {
@@ -28,41 +28,43 @@ export default function CertificatesPage() {
       }
       setUser(user)
 
-      // Get user's certificates with team and hackathon info
+      // Get user's certificates
       const { data: certificates } = await supabase
         .from('certificates')
         .select('*')
         .eq('user_id', user.id)
-      
-      // Also get winners info
-      const { data: winners } = await supabase
-        .from('winners')
-        .select('*')
-      
-      // Get teams info
-      const { data: teams } = await supabase
-        .from('teams')
-        .select('id, team_name')
-      
-      // Get hackathons info
-      const { data: hackathons } = await supabase
-        .from('hackathons')
-        .select('id, name')
-      
+
+      // Resolve this user's team per hackathon (certificates aren't linked to a team directly)
+      const { data: myTeamMemberships } = await supabase
+        .from('team_members')
+        .select('team_id')
+        .eq('user_id', user.id)
+      const myTeamIds = (myTeamMemberships || []).map((tm: any) => tm.team_id)
+
+      const [{ data: teams }, { data: hackathons }, { data: winners }] = await Promise.all([
+        myTeamIds.length
+          ? supabase.from('teams').select('id, team_name, hackathon_id').in('id', myTeamIds)
+          : Promise.resolve({ data: [] as any[] }),
+        supabase.from('hackathons').select('id, name'),
+        myTeamIds.length
+          ? supabase.from('winners').select('*').in('team_id', myTeamIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ])
+
       // Combine data
       const enrichedCertificates = (certificates || []).map(cert => {
-        const team = teams?.find(t => t.id === cert.team_id)
+        const team = teams?.find(t => t.hackathon_id === cert.hackathon_id)
         const hackathon = hackathons?.find(h => h.id === cert.hackathon_id)
-        const winner = winners?.find(w => w.team_id === cert.team_id)
+        const winner = team ? winners?.find(w => w.team_id === team.id) : null
         return {
           ...cert,
-          team_name: team?.team_name || 'Unknown Team',
+          team_name: team?.team_name || 'Individual Entry',
           hackathon_name: hackathon?.name || 'Unknown Hackathon',
-          rank: winner?.rank || 1,
+          rank: winner?.rank || (cert.certificate_type === 'winner' ? 1 : 0),
           prize: winner?.prize_amount || 0
         }
       })
-      
+
       setMyCertificates(enrichedCertificates)
       
     } catch (error) {
@@ -189,7 +191,7 @@ export default function CertificatesPage() {
                   <div class="sign-line">Organizing Director</div>
                   <div class="sign-line">Date of Issuance</div>
                 </div>
-                <div class="date">Verification Token: ${certificate.id.slice(0, 8).toUpperCase()}-${new Date().getFullYear()}</div>
+                <div class="date">Certificate ID: ${certificate.certificate_id} &middot; Verification Code: ${certificate.verification_code}</div>
                 <footer>Hackathon Hub Operations Center</footer>
               </div>
             </div>

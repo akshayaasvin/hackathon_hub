@@ -24,7 +24,7 @@ export default function AdminLayout({
 
   const navItems = [
     { href: '/admin', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
-    { href: '/admin/approvals', label: 'Registration Approvals', icon: <CheckSquare size={18} /> },
+    { href: '/admin/approvals', label: 'Account Approvals', icon: <CheckSquare size={18} /> },
     { href: '/admin/applications', label: 'Applications', icon: <FileSpreadsheet size={18} /> },
     { href: '/admin/submissions', label: 'Submissions', icon: <Send size={18} /> },
     { href: '/admin/announcements', label: 'Announcements', icon: <Megaphone size={18} /> },

@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '../../lib/supabase/client'
-import { Star, Trophy, Users, Check, MessageSquare, Sliders, Play, ArrowLeft } from 'lucide-react'
-import { withTimeout } from '../../lib/utils'
+import { createClient } from '@/lib/supabase/client'
+import { Trophy, Check, MessageSquare, Sliders, ArrowLeft } from 'lucide-react'
+import { withTimeout } from '@/lib/utils'
 
 export default function JuryDashboard() {
   const [user, setUser] = useState<any>(null)
@@ -19,8 +19,8 @@ export default function JuryDashboard() {
   const [scores, setScores] = useState({
     innovation: 0,
     technical: 0,
-    impact: 0,
     ux: 0,
+    feasibility: 0,
     presentation: 0
   })
   const [feedback, setFeedback] = useState('')
@@ -45,16 +45,18 @@ export default function JuryDashboard() {
       }
       setUser(user)
 
-      // Get hackathons with 5s timeout
-      const { data: hackathonData } = await withTimeout(
-        supabase
-          .from('hackathons')
-          .select('*')
-          .eq('status', 'published'),
+      // Only show hackathons where this jury member has been assigned teams
+      const { data: assignments } = await withTimeout(
+        supabase.from('judge_assignments').select('hackathon_id').eq('judge_id', user.id),
         5000
       )
+      const hackathonIds = [...new Set((assignments || []).map((a: any) => a.hackathon_id))]
+
+      const { data: hackathonData } = hackathonIds.length
+        ? await withTimeout(supabase.from('hackathons').select('*').in('id', hackathonIds), 5000)
+        : { data: [] as any[] }
       setHackathons(hackathonData || [])
-      
+
     } catch (err: any) {
       console.error('Error:', err)
       setError(err.message || 'Failed to load jury dashboard. Connection timed out.')
@@ -69,25 +71,42 @@ export default function JuryDashboard() {
     setError(null)
     
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      const { data: myAssignments, error: assignErr } = await supabase
+        .from('judge_assignments')
+        .select('team_id')
+        .eq('hackathon_id', hackathon.id)
+        .eq('judge_id', user?.id)
+
+      if (assignErr) throw assignErr
+
+      const assignedTeamIds = (myAssignments || []).map((a: any) => a.team_id)
+
+      if (assignedTeamIds.length === 0) {
+        setTeams([])
+        return
+      }
+
       const { data: teamsData, error: teamsErr } = await supabase
         .from('teams')
         .select('*, team_members(count)')
-        .eq('hackathon_id', hackathon.id)
-      
+        .in('id', assignedTeamIds)
+
       if (teamsErr) throw teamsErr
-      
+
       const teamIds = (teamsData || []).map((t: any) => t.id)
 
       const [submissionsRes, evaluationsRes] = await withTimeout(
         Promise.all([
-          teamIds.length > 0 
+          teamIds.length > 0
             ? supabase.from('submissions').select('*').in('team_id', teamIds)
-            : Promise.resolve({ data: [] }),
-          supabase.from('evaluations').select('*').eq('hackathon_id', hackathon.id)
+            : Promise.resolve({ data: [] as any[] }),
+          supabase.from('evaluations').select('*').eq('hackathon_id', hackathon.id).eq('judge_id', user?.id)
         ]),
         5000
       )
-      
+
       const subsData = submissionsRes.data || []
       const evaluationsData = evaluationsRes.data || []
 
@@ -96,7 +115,7 @@ export default function JuryDashboard() {
         const evaluation = evaluationsData.find((e: any) => e.team_id === team.id) || null
         return { ...team, submission, evaluation }
       })
-      
+
       setTeams(teamsWithSubmissions)
     } catch (err: any) {
       console.error(err)
@@ -108,7 +127,7 @@ export default function JuryDashboard() {
 
   const loadTeamForEvaluation = async (team: any) => {
     setSelectedTeam(team)
-    
+
     // Get submission
     const { data: submission } = await supabase
       .from('submissions')
@@ -116,63 +135,58 @@ export default function JuryDashboard() {
       .eq('team_id', team.id)
       .single()
     setSubmission(submission)
-    
-    // Get existing evaluation
+
+    // Get this judge's existing evaluation for this team
     const { data: evaluation } = await supabase
       .from('evaluations')
       .select('*')
       .eq('team_id', team.id)
-      .single()
-    
+      .eq('judge_id', user?.id)
+      .maybeSingle()
+
     if (evaluation) {
       setEvaluation(evaluation)
       setScores({
         innovation: evaluation.innovation_score,
         technical: evaluation.technical_score,
-        impact: evaluation.impact_score,
         ux: evaluation.ux_score,
+        feasibility: evaluation.feasibility_score,
         presentation: evaluation.presentation_score
       })
       setFeedback(evaluation.feedback || '')
     } else {
       setEvaluation(null)
-      setScores({ innovation: 0, technical: 0, impact: 0, ux: 0, presentation: 0 })
+      setScores({ innovation: 0, technical: 0, ux: 0, feasibility: 0, presentation: 0 })
       setFeedback('')
     }
-    
+
     setShowEvaluationModal(true)
   }
 
   const calculateTotalScore = () => {
     return (
-      scores.innovation * 0.25 +
-      scores.technical * 0.25 +
-      scores.impact * 0.20 +
-      scores.ux * 0.15 +
-      scores.presentation * 0.15
+      scores.innovation + scores.technical + scores.ux + scores.feasibility + scores.presentation
     ).toFixed(2)
   }
 
   const handleSubmitEvaluation = async () => {
     setActionLoading(true)
-    const totalScore = Number(calculateTotalScore())
-    
+
     if (evaluation) {
-      // Update existing evaluation
+      // Update existing evaluation (total_score is a DB-generated column, never set directly)
       const { error } = await supabase
         .from('evaluations')
         .update({
           innovation_score: scores.innovation,
           technical_score: scores.technical,
-          impact_score: scores.impact,
           ux_score: scores.ux,
+          feasibility_score: scores.feasibility,
           presentation_score: scores.presentation,
-          total_score: totalScore,
           feedback: feedback,
-          evaluated_at: new Date().toISOString()
+          submitted_at: new Date().toISOString()
         })
         .eq('id', evaluation.id)
-      
+
       if (error) {
         alert('Error updating evaluation: ' + error.message)
       } else {
@@ -188,13 +202,12 @@ export default function JuryDashboard() {
         hackathon_id: selectedHackathon.id,
         innovation_score: scores.innovation,
         technical_score: scores.technical,
-        impact_score: scores.impact,
         ux_score: scores.ux,
+        feasibility_score: scores.feasibility,
         presentation_score: scores.presentation,
-        total_score: totalScore,
         feedback: feedback
       })
-      
+
       if (error) {
         alert('Error saving evaluation: ' + error.message)
       } else {
@@ -342,38 +355,23 @@ export default function JuryDashboard() {
               <h4 style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '10px' }}>Submitted Assets</h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '14px' }}>
                 <p><strong>Title:</strong> <span style={{ color: 'var(--text-primary)' }}>{submission.project_title}</span></p>
-                <p><strong>Pitch:</strong> <span style={{ color: 'var(--text-secondary)' }}>{submission.project_description || 'No pitch document'}</span></p>
+                <p><strong>Problem Statement:</strong> <span style={{ color: 'var(--text-secondary)' }}>{submission.problem_statement || 'Not provided'}</span></p>
+                <p><strong>Solution:</strong> <span style={{ color: 'var(--text-secondary)' }}>{submission.solution || 'Not provided'}</span></p>
+                {submission.features && (
+                  <p><strong>Key Features:</strong> <span style={{ color: 'var(--text-secondary)' }}>{submission.features}</span></p>
+                )}
                 {submission.repo_link && (
                   <p><strong>GitHub:</strong> <a href={submission.repo_link} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>{submission.repo_link}</a></p>
                 )}
                 {submission.demo_video_url && (
                   <p><strong>Demo Video:</strong> <a href={submission.demo_video_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>Watch Pitch Video</a></p>
                 )}
-                {submission.ppt_url && (() => {
-                  let ppt = ''
-                  let pdf = ''
-                  try {
-                    if (submission.ppt_url.startsWith('{')) {
-                      const parsed = JSON.parse(submission.ppt_url)
-                      ppt = parsed.ppt || ''
-                      pdf = parsed.pdf || ''
-                    } else {
-                      ppt = submission.ppt_url
-                    }
-                  } catch (e) {
-                    ppt = submission.ppt_url
-                  }
-                  return (
-                    <>
-                      {ppt && (
-                        <p><strong>PPT Slides:</strong> <a href={ppt} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>View PPT slides</a></p>
-                      )}
-                      {pdf && (
-                        <p><strong>PDF Document:</strong> <a href={pdf} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>View Solution PDF</a></p>
-                      )}
-                    </>
-                  )
-                })()}
+                {submission.ppt_url && (
+                  <p><strong>PPT Slides:</strong> <a href={submission.ppt_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>View PPT slides</a></p>
+                )}
+                {submission.report_pdf_url && (
+                  <p><strong>PDF Report:</strong> <a href={submission.report_pdf_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>View Report PDF</a></p>
+                )}
               </div>
             </div>
             
@@ -385,74 +383,74 @@ export default function JuryDashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '28px' }}>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '14px' }}>
-                  <strong>Innovation (25%)</strong>
-                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{scores.innovation}/100</span>
+                  <strong>Innovation</strong>
+                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{scores.innovation}/25</span>
                 </div>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="100" 
-                  value={scores.innovation} 
+                <input
+                  type="range"
+                  min="0"
+                  max="25"
+                  value={scores.innovation}
                   onChange={(e) => setScores({...scores, innovation: parseInt(e.target.value)})}
                   style={{ width: '100%', accentColor: 'var(--primary)' }}
                 />
               </div>
-              
+
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '14px' }}>
-                  <strong>Technical Complexity (25%)</strong>
-                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{scores.technical}/100</span>
+                  <strong>Technical Complexity</strong>
+                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{scores.technical}/25</span>
                 </div>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="100" 
-                  value={scores.technical} 
+                <input
+                  type="range"
+                  min="0"
+                  max="25"
+                  value={scores.technical}
                   onChange={(e) => setScores({...scores, technical: parseInt(e.target.value)})}
                   style={{ width: '100%', accentColor: 'var(--primary)' }}
                 />
               </div>
-              
+
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '14px' }}>
-                  <strong>Impact (20%)</strong>
-                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{scores.impact}/100</span>
+                  <strong>User Experience</strong>
+                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{scores.ux}/20</span>
                 </div>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="100" 
-                  value={scores.impact} 
-                  onChange={(e) => setScores({...scores, impact: parseInt(e.target.value)})}
-                  style={{ width: '100%', accentColor: 'var(--primary)' }}
-                />
-              </div>
-              
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '14px' }}>
-                  <strong>Documentation (15%)</strong>
-                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{scores.ux}/100</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="100" 
-                  value={scores.ux} 
+                <input
+                  type="range"
+                  min="0"
+                  max="20"
+                  value={scores.ux}
                   onChange={(e) => setScores({...scores, ux: parseInt(e.target.value)})}
                   style={{ width: '100%', accentColor: 'var(--primary)' }}
                 />
               </div>
-              
+
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '14px' }}>
-                  <strong>Presentation (15%)</strong>
-                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{scores.presentation}/100</span>
+                  <strong>Feasibility</strong>
+                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{scores.feasibility}/15</span>
                 </div>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="100" 
-                  value={scores.presentation} 
+                <input
+                  type="range"
+                  min="0"
+                  max="15"
+                  value={scores.feasibility}
+                  onChange={(e) => setScores({...scores, feasibility: parseInt(e.target.value)})}
+                  style={{ width: '100%', accentColor: 'var(--primary)' }}
+                />
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '14px' }}>
+                  <strong>Presentation</strong>
+                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{scores.presentation}/15</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="15"
+                  value={scores.presentation}
                   onChange={(e) => setScores({...scores, presentation: parseInt(e.target.value)})}
                   style={{ width: '100%', accentColor: 'var(--primary)' }}
                 />

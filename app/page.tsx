@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import HeroBackground from '@/components/HeroBackground'
-import { 
-  Trophy, Rocket, Cpu, Code, GitFork, Sparkles,
-  Users, Award, ArrowRight, Box, TrendingUp, Zap
+import {
+  Trophy, Rocket, Cpu, Code, GitFork, Award,
+  Users, ArrowRight, Box, TrendingUp, Zap,
+  UserPlus, Send, Gavel, School, GraduationCap,
+  DollarSign, Compass, ShieldCheck
 } from 'lucide-react'
 
 function CountUp({ end, duration = 2000 }: { end: number; duration?: number }) {
@@ -37,6 +39,52 @@ function RevealOnScroll({ children }: { children: React.ReactNode }) {
   }, [])
   return <div ref={ref} className={`reveal-section ${isVisible ? 'is-visible' : ''}`}>{children}</div>
 }
+
+const steps = [
+  {
+    icon: <UserPlus size={22} />,
+    title: '1. Register & form a team',
+    desc: 'Sign up as a student, pick a hackathon, and team up with up to four collaborators — or fly solo.',
+  },
+  {
+    icon: <Code size={22} />,
+    title: '2. Build & submit your project',
+    desc: 'Ship your idea before the deadline: repo link, demo video, pitch deck, and a written solution.',
+  },
+  {
+    icon: <Gavel size={22} />,
+    title: '3. Present to expert jury',
+    desc: 'Industry and academic judges score your work on innovation, technical depth, UX, feasibility, and delivery.',
+  },
+  {
+    icon: <Trophy size={22} />,
+    title: '4. Win prizes, funding & certificates',
+    desc: 'Top teams take home cash prizes, funding introductions, and every participant gets a verifiable certificate.',
+  },
+]
+
+const whatYouGet = [
+  {
+    icon: <ShieldCheck size={24} />,
+    title: 'A certificate for every participant',
+    desc: 'Every registered participant earns a certificate with a unique verification code — proof of real work, not just attendance.',
+  },
+  {
+    icon: <DollarSign size={24} />,
+    title: 'Real prize money for the best demos',
+    desc: 'Top-ranked teams are judged on a transparent 100-point rubric and walk away with cash prizes, not just bragging rights.',
+  },
+  {
+    icon: <Rocket size={24} />,
+    title: 'A path from standout idea to funding',
+    desc: "Projects that impress the jury get introduced to incubation and funding conversations — this isn't a dead end after demo day.",
+  },
+  {
+    icon: <GraduationCap size={24} />,
+    title: 'Student to founder, one hackathon at a time',
+    desc: 'HackathonHub is built to be the first step in a longer founder journey — mentorship and momentum, not just a weekend event.',
+  },
+]
 
 export default function Home() {
   return (
@@ -86,34 +134,179 @@ export default function Home() {
             <h1
               className="animated-gradient-text-bright"
               style={{
-                fontSize: '54px', marginBottom: '18px',
+                fontSize: '50px', marginBottom: '18px',
                 fontFamily: 'Space Grotesk, sans-serif', fontWeight: 800,
-                letterSpacing: '-0.04em', lineHeight: '1.06'
+                letterSpacing: '-0.04em', lineHeight: '1.08'
               }}
             >
-              Hackathon Manager
+              Turn Your Idea Into a Funded Startup
             </h1>
 
             <p style={{
               fontSize: '16px', color: 'var(--text-secondary)', lineHeight: '1.65',
-              marginBottom: '36px', maxWidth: '500px', marginLeft: 'auto', marginRight: 'auto',
+              marginBottom: '36px', maxWidth: '520px', marginLeft: 'auto', marginRight: 'auto',
             }}>
-              The ultimate platform for organizers, participants, and jury members to coordinate,
-              submit projects, and evaluate hackathons — end to end.
+              Register, build with a team, and pitch to real industry jury. Every participant earns a
+              verifiable certificate, top teams win prize money and mentorship, and standout projects get
+              a path to funding — with your college recognized for backing you.
             </p>
 
             <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }} className="flex-mobile-wrap">
-              <a href="/login" className="btn-cta-primary-bright">
-                Login to Dashboard
+              <a href="/register" className="btn-cta-primary-bright">
+                Register Now
                 <ArrowRight size={17} className="cta-arrow" style={{ transition: 'transform 0.3s' }} />
               </a>
-              <a href="/register" className="btn-cta-secondary-bright">
-                Register Now
+              <a href="/login" className="btn-cta-secondary-bright">
+                Login to Dashboard
               </a>
             </div>
           </div>
         </div>
       </div>
+
+      {/* ── HOW IT WORKS ── */}
+      <RevealOnScroll>
+        <div className="premium-container" style={{ width: '100%' }}>
+          <h2 className="section-title">How It Works</h2>
+          <p className="section-subtitle">
+            From sign-up to demo day in four steps — no guesswork, no hidden gates.
+          </p>
+          <div className="features-grid">
+            {steps.map((step) => (
+              <div key={step.title} className="premium-feature-card">
+                <div className="feature-icon-wrapper">{step.icon}</div>
+                <h3 className="feature-title">{step.title}</h3>
+                <p className="feature-desc">{step.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </RevealOnScroll>
+
+      {/* ── WHAT YOU GET ── */}
+      <RevealOnScroll>
+        <div className="premium-container" style={{ width: '100%' }}>
+          <h2 className="section-title">What You Get</h2>
+          <p className="section-subtitle">
+            This isn't a weekend certificate mill — it's built to compound into something real.
+          </p>
+          <div className="features-grid">
+            {whatYouGet.map((item) => (
+              <div key={item.title} className="premium-feature-card">
+                <div className="feature-icon-wrapper">{item.icon}</div>
+                <h3 className="feature-title">{item.title}</h3>
+                <p className="feature-desc">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </RevealOnScroll>
+
+      {/* ── FOR COLLEGES / FOR JURY ── */}
+      <RevealOnScroll>
+        <div className="premium-container" style={{ width: '100%' }}>
+          <div className="responsive-grid-2" style={{ gap: '24px', marginBottom: '24px' }}>
+            <div className="glass-card" style={{ padding: '32px' }}>
+              <div className="feature-icon-wrapper" style={{ marginBottom: '20px' }}>
+                <School size={24} />
+              </div>
+              <h3 style={{ fontSize: '22px', fontFamily: 'var(--font-display)', marginBottom: '12px', color: 'var(--text-primary)' }}>
+                For Colleges
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: '1.7', marginBottom: '16px' }}>
+                Register your institution and get a live dashboard tracking every student's journey —
+                registered, teamed up, submitted, evaluated, ranked. Colleges get recognition and rewards
+                when their students perform, turning participation into institutional bragging rights.
+              </p>
+              <a href="/register" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '14px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                Register your college <ArrowRight size={14} />
+              </a>
+            </div>
+
+            <div className="glass-card" style={{ padding: '32px' }}>
+              <div className="feature-icon-wrapper" style={{ marginBottom: '20px' }}>
+                <Gavel size={24} />
+              </div>
+              <h3 style={{ fontSize: '22px', fontFamily: 'var(--font-display)', marginBottom: '12px', color: 'var(--text-primary)' }}>
+                For Jury
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: '1.7', marginBottom: '16px' }}>
+                Industry engineers, founders, and faculty score assigned teams on a structured rubric —
+                and go further with written feedback that guides students on what to fix next. It's career
+                guidance, not just a scoreboard.
+              </p>
+              <a href="/register" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '14px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                Apply as a jury member <ArrowRight size={14} />
+              </a>
+            </div>
+          </div>
+        </div>
+      </RevealOnScroll>
+
+      {/* ── STATS STRIP ── */}
+      <RevealOnScroll>
+        <div className="premium-container" style={{ width: '100%' }}>
+          <h2 className="section-title">What We're Building Toward</h2>
+          <p className="section-subtitle">
+            HackathonHub just launched — these are the targets we're building capacity for this year, not
+            historical claims.
+          </p>
+          <div className="stats-grid">
+            <div className="glass-card stat-card-gradient" style={{ textAlign: 'center', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <Trophy size={22} color="var(--primary)" />
+              <h3 style={{ fontSize: '30px', color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
+                <CountUp end={50} />+
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Hackathons to be hosted</p>
+            </div>
+            <div className="glass-card stat-card-gradient" style={{ textAlign: 'center', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <Users size={22} color="var(--secondary)" />
+              <h3 style={{ fontSize: '30px', color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
+                <CountUp end={10000} />+
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Participant capacity</p>
+            </div>
+            <div className="glass-card stat-card-gradient" style={{ textAlign: 'center', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <School size={22} color="var(--accent)" />
+              <h3 style={{ fontSize: '30px', color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
+                <CountUp end={200} />+
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Colleges we're onboarding</p>
+            </div>
+            <div className="glass-card stat-card-gradient" style={{ textAlign: 'center', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <DollarSign size={22} color="var(--warning)" />
+              <h3 style={{ fontSize: '30px', color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
+                ₹<CountUp end={1} />Cr+
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Prize pool targeted for 2026</p>
+            </div>
+          </div>
+        </div>
+      </RevealOnScroll>
+
+      {/* ── FOOTER CTA ── */}
+      <RevealOnScroll>
+        <div className="premium-container" style={{ width: '100%', paddingBottom: '80px' }}>
+          <div className="glass-card-saas" style={{ padding: '56px 40px', textAlign: 'center', maxWidth: '760px', margin: '0 auto' }}>
+            <Compass size={28} color="var(--primary)" style={{ marginBottom: '16px' }} />
+            <h2 style={{ fontSize: '30px', fontFamily: 'var(--font-display)', fontWeight: 800, marginBottom: '14px', color: 'var(--text-primary)' }}>
+              Ready to build something real?
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '15px', marginBottom: '32px', maxWidth: '480px', marginLeft: 'auto', marginRight: 'auto' }}>
+              Whether you're a student with an idea, a college backing your students, or an expert ready to
+              mentor — there's a seat for you.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }} className="flex-mobile-wrap">
+              <a href="/register" className="btn-cta-primary-bright">
+                Register Now <ArrowRight size={17} />
+              </a>
+              <a href="/login" className="btn-cta-secondary-bright">
+                Login to Dashboard
+              </a>
+            </div>
+          </div>
+        </div>
+      </RevealOnScroll>
     </div>
   )
 }

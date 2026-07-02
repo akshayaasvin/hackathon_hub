@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '../../../lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { Users, Search, Mail, ShieldAlert, Award, School } from 'lucide-react'
 
 export default function AdminUsersPage() {
@@ -38,15 +38,6 @@ export default function AdminUsersPage() {
       alert('Error updating role: ' + error.message)
     } else {
       alert('User role updated successfully!')
-      
-      // Update mock users list in local storage auth
-      const mockUsers = JSON.parse(localStorage.getItem('mock_users') || '[]')
-      const idx = mockUsers.findIndex((u: any) => u.id === userId)
-      if (idx !== -1) {
-        mockUsers[idx].user_metadata.role = newRole
-        localStorage.setItem('mock_users', JSON.stringify(mockUsers))
-      }
-
       loadUsers()
     }
     setActionLoading(false)
@@ -97,13 +88,14 @@ export default function AdminUsersPage() {
               <th>Name</th>
               <th>Email</th>
               <th>Role</th>
+              <th>Status</th>
               <th>Modify Role</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={4} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No users found.</td>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No users found.</td>
               </tr>
             ) : (
               filtered.map((u) => {
@@ -129,8 +121,9 @@ export default function AdminUsersPage() {
                         {u.role ? u.role.toUpperCase() : 'PARTICIPANT'}
                       </span>
                     </td>
+                    <td style={{ textTransform: 'capitalize', color: 'var(--text-secondary)' }}>{u.status || '-'}</td>
                     <td>
-                      <select 
+                      <select
                         value={u.role || 'participant'} 
                         onChange={(e) => handleRoleChange(u.id, e.target.value)}
                         disabled={actionLoading}
