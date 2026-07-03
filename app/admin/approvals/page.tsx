@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { postJson } from '@/lib/apiFetch'
 import { Check, X, School, Gavel } from 'lucide-react'
 
 interface PendingUser {
@@ -93,16 +94,12 @@ export default function AdminApprovalsPage() {
 
     setProcessingId(userId)
     try {
-      const res = await fetch('/api/admin/approvals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, userId, reason }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Action failed')
+      const result = await postJson('/api/admin/approvals', { action, userId, reason })
+      if (!result.success) {
+        alert('Error: ' + result.message)
+        return
+      }
       await loadPending()
-    } catch (err: any) {
-      alert('Error: ' + err.message)
     } finally {
       setProcessingId(null)
     }

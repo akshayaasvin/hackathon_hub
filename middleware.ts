@@ -114,6 +114,10 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Exclude /api/** — every API route handles its own auth server-side
+    // (registration is intentionally public; admin routes check requireAdmin()
+    // internally). Letting middleware redirect unauthenticated API calls to
+    // /login means the client receives an HTML page instead of JSON.
+    '/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

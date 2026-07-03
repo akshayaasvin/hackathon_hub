@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Gavel, Mail, User, Trash2 } from 'lucide-react'
 import { adminCreateJurySchema } from '@/lib/validation'
+import { postJson } from '@/lib/apiFetch'
 
 export default function AdminJuryPage() {
   const [juryList, setJuryList] = useState<any[]>([])
@@ -78,19 +79,15 @@ export default function AdminJuryPage() {
     setErrors({})
     setActionLoading(true)
     try {
-      const res = await fetch('/api/admin/create-account', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(parsed.data),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Could not create jury account')
+      const result = await postJson('/api/admin/create-account', parsed.data)
+      if (!result.success) {
+        alert('Error: ' + result.message)
+        return
+      }
       alert('Jury account created and activated.')
       setFormData(emptyForm)
       setShowAddModal(false)
       await loadAll()
-    } catch (err: any) {
-      alert('Error: ' + err.message)
     } finally {
       setActionLoading(false)
     }

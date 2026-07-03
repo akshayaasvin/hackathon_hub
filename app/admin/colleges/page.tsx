@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Search, Eye, X, Trophy, Users, BookOpen, TrendingUp } from 'lucide-react'
 import { adminCreateCollegeSchema } from '@/lib/validation'
+import { postJson } from '@/lib/apiFetch'
 
 export default function AdminCollegesPage() {
   const [colleges, setColleges] = useState<any[]>([])
@@ -95,18 +96,14 @@ export default function AdminCollegesPage() {
     setErrors({})
     setActionLoading(true)
     try {
-      const res = await fetch('/api/admin/create-account', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(parsed.data),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Could not create college account')
+      const result = await postJson('/api/admin/create-account', parsed.data)
+      if (!result.success) {
+        alert('Error: ' + result.message)
+        return
+      }
       alert('College account created and activated.')
       setShowFormModal(false)
       await loadColleges()
-    } catch (err: any) {
-      alert('Error: ' + err.message)
     } finally {
       setActionLoading(false)
     }

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { FormField } from './FormField'
 import { collegeRegisterSchema } from '@/lib/validation'
+import { postJson } from '@/lib/apiFetch'
 
 const gridStyle: React.CSSProperties = {
   display: 'grid',
@@ -45,16 +46,12 @@ export function CollegeRegisterForm({ onSuccess }: { onSuccess: (status: string)
     setErrors({})
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(parsed.data),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Registration failed')
-      onSuccess(json.status)
-    } catch (err: any) {
-      setServerError(err.message)
+      const result = await postJson<{ status: string }>('/api/auth/register', parsed.data)
+      if (!result.success) {
+        setServerError(result.message)
+        return
+      }
+      onSuccess(result.data!.status)
     } finally {
       setLoading(false)
     }
