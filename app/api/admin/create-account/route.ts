@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       admin = createAdminClient()
     } catch (err: any) {
       console.error('[create-account] createAdminClient failed:', err)
-      return apiError('Server is misconfigured (missing service role key). Contact the site administrator.', 500)
+      return apiError('Something went wrong. Please try again later.', 500)
     }
 
     const { data: createData, error: createError } = await admin.auth.admin.createUser({

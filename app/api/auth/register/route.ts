@@ -34,27 +34,54 @@ export async function POST(request: Request) {
           ? input.representative_name
           : input.full_name
 
-    const supabase = await createClient()
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-    })
-
-    if (signUpError || !signUpData.user) {
-      return apiError(signUpError?.message || 'Registration failed', 400)
-    }
-
-    const userId = signUpData.user.id
-
     let admin
     try {
       admin = createAdminClient()
     } catch (err: any) {
       console.error('[register] createAdminClient failed:', err)
-      return apiError(
-        'Server is misconfigured (missing service role key). Contact the site administrator.',
-        500
-      )
+      return apiError('Something went wrong. Please try again later.', 500)
+    }
+
+    let userId: string
+    if (input.role === 'participant') {
+      // Participants need a real Supabase confirmation email — it drives the
+      // auto-activation trigger on auth.users.email_confirmed_at.
+      const supabase = await createClient()
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+      })
+      if (signUpError || !signUpData.user) {
+        return apiError(
+          signUpError?.message.includes('already registered')
+            ? 'An account with this email already exists.'
+            : signUpError?.message || 'Registration failed',
+          400
+        )
+      }
+      userId = signUpData.user.id
+    } else {
+      // College/jury accounts can't log in until admin approval regardless
+      // (see middleware's pending/rejected gate), so there's nothing for a
+      // confirmation email to do here. Using admin.createUser instead of
+      // signUp skips Supabase's own auth email entirely — signUp was
+      // burning through the project's email rate limit on every attempt,
+      // which then broke registration for every role, not just this one.
+      const { data: createData, error: createError } = await admin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      })
+      if (createError || !createData.user) {
+        return apiError(
+          createError?.message.includes('already registered') ||
+            createError?.message.includes('already been registered')
+            ? 'An account with this email already exists.'
+            : 'Registration failed. Please try again.',
+          400
+        )
+      }
+      userId = createData.user.id
     }
 
     const status = input.role === 'participant' ? 'active' : 'pending'

@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       admin = createAdminClient()
     } catch (err: any) {
       console.error('[approvals] createAdminClient failed:', err)
-      return apiError('Server is misconfigured (missing service role key). Contact the site administrator.', 500)
+      return apiError('Something went wrong. Please try again later.', 500)
     }
 
     const { data: targetUser, error: fetchError } = await admin
@@ -64,6 +64,15 @@ export async function POST(request: Request) {
         .from('users')
         .update({ status: 'rejected', updated_at: new Date().toISOString() })
         .eq('id', userId)
+
+      // Lock the account at the Supabase Auth layer too — not just our own
+      // middleware status check — so a rejected applicant truly can't sign
+      // in, while still keeping the users/profile rows for audit history.
+      try {
+        await admin.auth.admin.updateUserById(userId, { ban_duration: '876000h' })
+      } catch (err) {
+        console.error('[approvals] failed to ban rejected user:', err)
+      }
 
       await sendEmail({
         to: targetUser.email,
