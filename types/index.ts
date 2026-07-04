@@ -35,8 +35,6 @@ export interface CollegeProfile {
   contact_number: string
   department: string | null
   college_address: string
-  approved_by: string | null
-  approved_at: string | null
   created_at: string
   updated_at: string
 }
@@ -53,8 +51,49 @@ export interface JuryProfile {
   experience_years: number | null
   date_of_birth: string | null
   location: string
-  approved_by: string | null
-  approved_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ApplicationStatus = 'pending' | 'approved' | 'rejected' | 'changes_requested'
+
+export interface CollegeApplication {
+  id: string
+  college_name: string
+  representative_name: string
+  position_in_college: string
+  date_of_birth: string | null
+  official_email: string
+  personal_email: string | null
+  contact_number: string
+  department: string | null
+  college_address: string
+  status: ApplicationStatus
+  admin_notes: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_user_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface JuryApplication {
+  id: string
+  full_name: string
+  contact_number: string
+  email: string
+  official_email: string | null
+  organization_name: string | null
+  portfolio_url: string | null
+  occupation: string
+  experience_years: number | null
+  date_of_birth: string | null
+  location: string
+  status: ApplicationStatus
+  admin_notes: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_user_id: string | null
   created_at: string
   updated_at: string
 }

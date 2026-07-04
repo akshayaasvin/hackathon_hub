@@ -59,7 +59,6 @@ export async function POST(request: Request) {
     }
 
     const userId = createData.user.id
-    const now = new Date().toISOString()
 
     const { error: usersError } = await admin.from('users').insert({
       id: userId,
@@ -88,8 +87,6 @@ export async function POST(request: Request) {
         contact_number: input.contact_number,
         department: input.department || null,
         college_address: input.college_address,
-        approved_by: adminUser.id,
-        approved_at: now,
       })
       profileError = error
     } else {
@@ -105,8 +102,6 @@ export async function POST(request: Request) {
         experience_years: input.experience_years ?? null,
         date_of_birth: input.date_of_birth || null,
         location: input.location,
-        approved_by: adminUser.id,
-        approved_at: now,
       })
       profileError = error
     }

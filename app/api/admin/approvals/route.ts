@@ -1,7 +1,12 @@
 import crypto from 'crypto'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { sendEmail, approvalEmailHtml, rejectionEmailHtml } from '@/lib/email'
+import {
+  sendEmail,
+  approvalEmailHtml,
+  rejectionEmailHtml,
+  changesRequestedEmailHtml,
+} from '@/lib/email'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
 
 function randomPassword() {
@@ -33,9 +38,16 @@ export async function POST(request: Request) {
       return apiError('Invalid request body — expected JSON.', 400)
     }
 
-    const { action, userId, reason } = body || {}
-    if (!userId || (action !== 'approve' && action !== 'reject')) {
-      return apiError('Invalid request — expected { action: "approve"|"reject", userId }.', 400)
+    const { action, role, applicationId, reason } = body || {}
+    const validActions = ['approve', 'reject', 'request_changes']
+    if (!applicationId || !['college', 'jury'].includes(role) || !validActions.includes(action)) {
+      return apiError(
+        'Invalid request — expected { action, role: "college"|"jury", applicationId, reason? }.',
+        400
+      )
+    }
+    if (action === 'request_changes' && !reason?.trim()) {
+      return apiError('A note is required so the applicant knows what to fix.', 400)
     }
 
     let admin
@@ -46,88 +58,153 @@ export async function POST(request: Request) {
       return apiError('Something went wrong. Please try again later.', 500)
     }
 
-    const { data: targetUser, error: fetchError } = await admin
-      .from('users')
+    const table = role === 'college' ? 'college_applications' : 'jury_applications'
+    const emailColumn = role === 'college' ? 'official_email' : 'email'
+
+    const { data: application, error: fetchError } = await admin
+      .from(table)
       .select('*')
-      .eq('id', userId)
+      .eq('id', applicationId)
       .single()
 
-    if (fetchError || !targetUser) {
-      return apiError('User not found.', 404)
+    if (fetchError || !application) {
+      return apiError('Application not found.', 404)
     }
-    if (targetUser.role !== 'college' && targetUser.role !== 'jury') {
-      return apiError('Only college/jury accounts go through approval.', 400)
+    if (application.status !== 'pending') {
+      return apiError(`This application was already ${application.status}.`, 400)
     }
+
+    const applicantEmail = application[emailColumn]
+    const applicantName = role === 'college' ? application.representative_name : application.full_name
+    const now = new Date().toISOString()
 
     if (action === 'reject') {
       await admin
-        .from('users')
-        .update({ status: 'rejected', updated_at: new Date().toISOString() })
-        .eq('id', userId)
-
-      // Lock the account at the Supabase Auth layer too — not just our own
-      // middleware status check — so a rejected applicant truly can't sign
-      // in, while still keeping the users/profile rows for audit history.
-      try {
-        await admin.auth.admin.updateUserById(userId, { ban_duration: '876000h' })
-      } catch (err) {
-        console.error('[approvals] failed to ban rejected user:', err)
-      }
+        .from(table)
+        .update({ status: 'rejected', reviewed_by: adminUser.id, reviewed_at: now, admin_notes: reason || null, updated_at: now })
+        .eq('id', applicationId)
 
       await sendEmail({
-        to: targetUser.email,
-        subject: 'HackathonHub registration update',
-        html: rejectionEmailHtml({ fullName: targetUser.full_name || 'there', reason }),
+        to: applicantEmail,
+        subject: 'HackathonHub application update',
+        html: rejectionEmailHtml({ fullName: applicantName, reason }),
       })
 
-      return apiSuccess({ status: 'rejected' }, 'Registration rejected.')
+      return apiSuccess({ status: 'rejected' }, 'Application rejected.')
     }
 
-    // action === 'approve'
+    if (action === 'request_changes') {
+      await admin
+        .from(table)
+        .update({ status: 'changes_requested', reviewed_by: adminUser.id, reviewed_at: now, admin_notes: reason, updated_at: now })
+        .eq('id', applicationId)
+
+      await sendEmail({
+        to: applicantEmail,
+        subject: 'HackathonHub application — changes requested',
+        html: changesRequestedEmailHtml({ fullName: applicantName, notes: reason }),
+      })
+
+      return apiSuccess({ status: 'changes_requested' }, 'Applicant notified.')
+    }
+
+    // action === 'approve' — this is the only point where the auth account,
+    // users row, and profile row get created.
     const tempPassword = randomPassword()
 
-    const { error: updateError } = await admin.auth.admin.updateUserById(userId, {
+    const { data: createData, error: createError } = await admin.auth.admin.createUser({
+      email: applicantEmail,
       password: tempPassword,
       email_confirm: true,
     })
 
-    if (updateError) {
-      // Auth user didn't exist yet (defensive fallback per brief §4.2).
-      const { error: createError } = await admin.auth.admin.createUser({
-        id: userId,
-        email: targetUser.email,
-        password: tempPassword,
-        email_confirm: true,
-      })
-      if (createError) {
-        console.error('[approvals] createUser fallback failed:', createError)
-        return apiError(createError.message, 500)
-      }
+    if (createError || !createData.user) {
+      console.error('[approvals] createUser failed:', createError)
+      return apiError(
+        createError?.message.includes('already registered')
+          ? 'An account with this email already exists.'
+          : 'Could not create the account. Please try again.',
+        500
+      )
     }
 
-    const profileTable = targetUser.role === 'college' ? 'college_profiles' : 'jury_profiles'
+    const userId = createData.user.id
 
-    await admin
-      .from('users')
-      .update({ status: 'active', updated_at: new Date().toISOString() })
-      .eq('id', userId)
+    const { error: usersError } = await admin.from('users').insert({
+      id: userId,
+      email: applicantEmail,
+      full_name: applicantName,
+      role,
+      status: 'active',
+    })
 
-    await admin
-      .from(profileTable)
-      .update({
-        approved_by: adminUser.id,
-        approved_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+    if (usersError) {
+      console.error('[approvals] users insert failed:', usersError)
+      try {
+        await admin.auth.admin.deleteUser(userId)
+      } catch {}
+      return apiError('Could not finish creating the account. Please try again.', 500)
+    }
+
+    let profileError = null
+    if (role === 'college') {
+      const { error } = await admin.from('college_profiles').insert({
+        user_id: userId,
+        college_name: application.college_name,
+        representative_name: application.representative_name,
+        position_in_college: application.position_in_college,
+        date_of_birth: application.date_of_birth,
+        official_email: application.official_email,
+        personal_email: application.personal_email,
+        contact_number: application.contact_number,
+        department: application.department,
+        college_address: application.college_address,
       })
-      .eq('user_id', userId)
+      profileError = error
+    } else {
+      const { error } = await admin.from('jury_profiles').insert({
+        user_id: userId,
+        full_name: application.full_name,
+        contact_number: application.contact_number,
+        email: application.email,
+        official_email: application.official_email,
+        organization_name: application.organization_name,
+        portfolio_url: application.portfolio_url,
+        occupation: application.occupation,
+        experience_years: application.experience_years,
+        date_of_birth: application.date_of_birth,
+        location: application.location,
+      })
+      profileError = error
+    }
+
+    if (profileError) {
+      console.error('[approvals] profile insert failed:', profileError)
+      await admin.from('users').delete().eq('id', userId)
+      try {
+        await admin.auth.admin.deleteUser(userId)
+      } catch {}
+      return apiError('Could not finish creating the account. Please try again.', 500)
+    }
+
+    await admin
+      .from(table)
+      .update({
+        status: 'approved',
+        reviewed_by: adminUser.id,
+        reviewed_at: now,
+        created_user_id: userId,
+        updated_at: now,
+      })
+      .eq('id', applicationId)
 
     const loginUrl = new URL('/login', request.url).toString()
     await sendEmail({
-      to: targetUser.email,
+      to: applicantEmail,
       subject: 'Your HackathonHub account is approved',
       html: approvalEmailHtml({
-        fullName: targetUser.full_name || 'there',
-        email: targetUser.email,
+        fullName: applicantName,
+        email: applicantEmail,
         password: tempPassword,
         loginUrl,
       }),

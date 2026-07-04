@@ -4,7 +4,7 @@ Next.js 14 (App Router) + TypeScript + Supabase platform for running hackathons:
 registration with admin approval, team formation, project submission, jury evaluation, results, and
 verifiable certificates.
 
-## Environment variables (`.env.local`)
+## Environment variables (`.env.local`, see `.env.example`)
 
 | Variable | Where to get it | Exposed to browser? |
 |---|---|---|
@@ -19,13 +19,16 @@ works, the applicant just won't get an email (check server logs for the generate
 
 ## One-time Supabase setup
 
-1. **Run the schema migration.** Paste `supabase/migrations/0001_init.sql` into the Supabase SQL editor
-   (or `supabase db push` if you have the CLI linked) and run it. This creates every table, the
-   `is_admin()`/`my_college_name()` helper functions, the auto-activation trigger, and all RLS policies.
+1. **Run the schema migrations, in order.** Paste `supabase/migrations/0001_init.sql` then
+   `supabase/migrations/0002_applications.sql` into the Supabase SQL editor (or `supabase db push` if
+   you have the CLI linked). `0001` creates the core schema, `is_admin()`/`my_college_name()` helpers,
+   the participant auto-activation trigger, and all RLS policies. `0002` adds the `college_applications`/
+   `jury_applications` staging tables that back the approval workflow (see Architecture notes below) and
+   drops the now-redundant `approved_by`/`approved_at` columns from `college_profiles`/`jury_profiles`.
 2. **(Optional) Seed a sample hackathon.** Run `supabase/seed.sql` the same way.
 3. **Enable email confirmation.** In Supabase Dashboard → Authentication → Providers → Email, make sure
-   "Confirm email" is **ON**. This can't be set via SQL — participants rely on it to auto-activate, and
-   college/jury applicants need it before admin approval.
+   "Confirm email" is **ON**. This can't be set via SQL. Only participants need it — they're the only
+   role that gets an auth account at registration time.
 4. **Create your first admin.** There's no self-serve admin signup. Register normally as a participant,
    then in the Supabase SQL editor run:
    ```sql
@@ -44,10 +47,16 @@ npm run dev
 - **Auth**: real Supabase Auth only — no mock/localStorage auth system. `lib/supabase/client.ts` and
   `lib/supabase/server.ts` are thin wrappers; `lib/supabase/admin.ts` is a service-role client that is
   never imported from client components (enforced by the `server-only` package).
-- **Registration**: `app/api/auth/register/route.ts` handles all three roles. Participants activate
-  automatically on email confirmation (via a Postgres trigger). College/jury applicants land in `pending`
-  status and are blocked from their dashboard by `middleware.ts` until an admin approves them via
-  `/admin/approvals`, which calls `app/api/admin/approvals/route.ts`.
+- **Registration**: `app/api/auth/register/route.ts` handles all three roles, but only **participants**
+  get a Supabase Auth account at registration time (activates automatically on email confirmation via a
+  Postgres trigger). **College and jury submissions never touch `auth.users` at registration** — they're
+  stored in the `college_applications`/`jury_applications` staging tables with `status='pending'`, and
+  no login exists for them at all yet. Resubmitting with the same email after a rejection or a
+  "changes requested" note updates the existing row instead of creating a duplicate.
+- **Approval**: `/admin/approvals` (`app/api/admin/approvals/route.ts`) is the *only* place a college/jury
+  auth account, `users` row, and profile row get created — and only on Approve. Reject leaves no account
+  behind at all (nothing to clean up). Request Changes emails the applicant a note and waits for them to
+  resubmit; it never touches `auth.users`.
 - **RLS**: every table has Row Level Security enabled — see `supabase/migrations/0001_init.sql` for the
   full policy set (admin full access, participants scoped to their own data, colleges scoped to students
   sharing their `college_name`, jury scoped to teams they're assigned via `judge_assignments`).

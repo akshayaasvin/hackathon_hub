@@ -52,3 +52,28 @@ export function rejectionEmailHtml({ fullName, reason }: { fullName: string; rea
     </div>
   `
 }
+
+export function applicationReceivedEmailHtml({ fullName }: { fullName: string }) {
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>Application received</h2>
+      <p>Hi ${fullName},</p>
+      <p>Thanks for applying to HackathonHub. Your application is now with our admin team for review.
+      You'll hear back by email once it's been approved — no account or password exists yet, so there's
+      nothing to log in with until then.</p>
+    </div>
+  `
+}
+
+export function changesRequestedEmailHtml({ fullName, notes }: { fullName: string; notes: string }) {
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>Your HackathonHub application needs a small update</h2>
+      <p>Hi ${fullName},</p>
+      <p>An admin reviewed your application and asked for a change before it can be approved:</p>
+      <p style="background:#FFFBEB;border-left:3px solid #D97706;padding:12px 16px;margin:16px 0;">${notes}</p>
+      <p>Please submit the registration form again with the correction — resubmitting with the same email
+      updates your existing application rather than creating a duplicate.</p>
+    </div>
+  `
+}
