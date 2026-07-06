@@ -42,7 +42,9 @@ export async function middleware(request: NextRequest) {
   }
 
   // Public/Auth routes
-  if (path === '/' || path === '/login' || path === '/register') {
+  // /jury/register is intentionally not linked anywhere public, but it must
+  // stay reachable by a judge who has the direct URL — same gating as /register.
+  if (path === '/' || path === '/login' || path === '/register' || path === '/jury/register') {
     if (user && path !== '/') {
       const { data: userData } = await supabase
         .from('users')

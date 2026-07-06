@@ -262,43 +262,24 @@ export default function Home() {
         </div>
       </RevealOnScroll>
 
-      {/* ── FOR COLLEGES / FOR JURY ── */}
+      {/* ── FOR INSTITUTIONS ── */}
       <RevealOnScroll>
         <div className="premium-container" style={{ width: '100%' }}>
-          <div className="responsive-grid-2" style={{ gap: '24px', marginBottom: '24px' }}>
-            <div className="glass-card" style={{ padding: '32px' }}>
-              <div className="feature-icon-wrapper" style={{ marginBottom: '20px' }}>
-                <School size={24} />
-              </div>
-              <h3 style={{ fontSize: '22px', fontFamily: 'var(--font-display)', marginBottom: '12px', color: 'var(--text-primary)' }}>
-                For Colleges
-              </h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: '1.7', marginBottom: '16px' }}>
-                Register your institution and get a live dashboard tracking every student's journey —
-                registered, teamed up, submitted, evaluated, ranked. Colleges get recognition and rewards
-                when their students perform, turning participation into institutional bragging rights.
-              </p>
-              <a href="/register" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '14px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                Register your college <ArrowRight size={14} />
-              </a>
+          <div className="glass-card" style={{ padding: '32px', maxWidth: '560px', margin: '0 auto 24px' }}>
+            <div className="feature-icon-wrapper" style={{ marginBottom: '20px' }}>
+              <School size={24} />
             </div>
-
-            <div className="glass-card" style={{ padding: '32px' }}>
-              <div className="feature-icon-wrapper" style={{ marginBottom: '20px' }}>
-                <Gavel size={24} />
-              </div>
-              <h3 style={{ fontSize: '22px', fontFamily: 'var(--font-display)', marginBottom: '12px', color: 'var(--text-primary)' }}>
-                For Jury
-              </h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: '1.7', marginBottom: '16px' }}>
-                Industry engineers, founders, and faculty score assigned teams on a structured rubric —
-                and go further with written feedback that guides students on what to fix next. It's career
-                guidance, not just a scoreboard.
-              </p>
-              <a href="/register" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '14px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                Apply as a jury member <ArrowRight size={14} />
-              </a>
-            </div>
+            <h3 style={{ fontSize: '22px', fontFamily: 'var(--font-display)', marginBottom: '12px', color: 'var(--text-primary)' }}>
+              For Institutions
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '15px', lineHeight: '1.7', marginBottom: '16px' }}>
+              Register your institution and get a live dashboard tracking every student's journey —
+              registered, teamed up, submitted, evaluated, ranked. Institutions get recognition and rewards
+              when their students perform, turning participation into institutional bragging rights.
+            </p>
+            <a href="/register" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '14px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              Register your institution <ArrowRight size={14} />
+            </a>
           </div>
         </div>
       </RevealOnScroll>
