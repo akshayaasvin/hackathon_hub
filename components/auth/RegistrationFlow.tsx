@@ -50,6 +50,8 @@ export function RegistrationFlow({ roles }: { roles: RegisterRole[] }) {
   const [role, setRole] = useState<RegisterRole | null>(roles.length === 1 ? roles[0] : null)
   const [success, setSuccess] = useState<RegisterRole | null>(null)
   const showSelector = roles.length > 1
+  // Jury has its own sign-in entry point at /jury; everyone else uses the shared /login.
+  const loginHref = (success ?? role) === 'jury' ? '/jury' : '/login'
 
   return (
     <div
@@ -69,7 +71,7 @@ export function RegistrationFlow({ roles }: { roles: RegisterRole[] }) {
           <p style={{ color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: 1.6 }}>
             {successCopy[success].body}
           </p>
-          <a href="/login" className="btn btn-primary" style={{ padding: '12px 28px' }}>
+          <a href={loginHref} className="btn btn-primary" style={{ padding: '12px 28px' }}>
             Go to Login
           </a>
         </div>

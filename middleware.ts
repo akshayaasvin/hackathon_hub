@@ -73,8 +73,17 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
+  // /admin and /jury (exact — /jury/register is already handled above) are their
+  // own authentication entry points: with no session, let the request through so
+  // the page itself renders a role-branded login form in place, instead of
+  // bouncing to the shared /login.
+  const isAdminOrJuryEntry = path.startsWith('/admin') || path === '/jury'
+
   // Route protection
   if (!user) {
+    if (isAdminOrJuryEntry) {
+      return response
+    }
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
@@ -114,11 +123,11 @@ export async function middleware(request: NextRequest) {
 
   // Role Checks
   if (path.startsWith('/admin') && role !== 'admin') {
-    return NextResponse.redirect(new URL('/access-denied', request.url))
+    return NextResponse.redirect(new URL('/access-denied?area=admin', request.url))
   }
 
   if (path.startsWith('/jury') && role !== 'jury') {
-    return NextResponse.redirect(new URL(getDashboardUrl(role), request.url))
+    return NextResponse.redirect(new URL('/access-denied?area=jury', request.url))
   }
 
   if (path.startsWith('/college') && role !== 'college') {

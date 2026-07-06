@@ -3,10 +3,62 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Trophy, Check, MessageSquare, Sliders, ArrowLeft } from 'lucide-react'
+import { Trophy, Check, MessageSquare, Sliders, ArrowLeft, Gavel } from 'lucide-react'
 import { withTimeout } from '@/lib/utils'
+import { RoleLoginGate } from '@/components/auth/RoleLoginGate'
 
-export default function JuryDashboard() {
+type AuthState = 'loading' | 'unauthenticated' | 'jury'
+
+export default function JuryPage() {
+  const router = useRouter()
+  const supabase = createClient()
+  const [authState, setAuthState] = useState<AuthState>('loading')
+
+  useEffect(() => {
+    checkAuth()
+  }, [])
+
+  const checkAuth = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setAuthState('unauthenticated')
+      return
+    }
+    const { data } = await supabase.from('users').select('role').eq('id', user.id).single()
+    if (data?.role !== 'jury') {
+      // Middleware already redirects this case server-side on a fresh request;
+      // this only fires for a client-side transition that didn't re-hit it.
+      router.push('/access-denied?area=jury')
+      return
+    }
+    setAuthState('jury')
+  }
+
+  if (authState === 'loading') {
+    return (
+      <div style={{ padding: '100px 20px', textAlign: 'center', fontSize: '18px', color: 'var(--text-secondary)' }}>
+        Loading...
+      </div>
+    )
+  }
+
+  if (authState === 'unauthenticated') {
+    return (
+      <RoleLoginGate
+        icon={<Gavel size={32} />}
+        title="Jury Sign In"
+        subtitle="Log in to evaluate your assigned teams."
+        registerHref="/jury/register"
+        registerLabel="Don't have an account? Register as Jury"
+        onAuthenticated={checkAuth}
+      />
+    )
+  }
+
+  return <JuryDashboardContent />
+}
+
+function JuryDashboardContent() {
   const [user, setUser] = useState<any>(null)
   const [hackathons, setHackathons] = useState<any[]>([])
   const [selectedHackathon, setSelectedHackathon] = useState<any>(null)
