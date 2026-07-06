@@ -101,13 +101,19 @@ export async function POST(request: Request) {
 
       const userId = signUpData.user.id
 
-      const { error: usersError } = await admin.from('users').insert({
-        id: userId,
-        email: input.email,
-        full_name: input.full_name,
-        role: 'participant',
-        status: 'active',
-      })
+      // Upsert, not insert: a database trigger may have already created a
+      // placeholder row (role=participant, status=pending) the instant
+      // auth.users got this id, before this code ever ran.
+      const { error: usersError } = await admin.from('users').upsert(
+        {
+          id: userId,
+          email: input.email,
+          full_name: input.full_name,
+          role: 'participant',
+          status: 'active',
+        },
+        { onConflict: 'id' }
+      )
 
       if (usersError) {
         console.error('[register] users insert failed:', usersError)

@@ -60,13 +60,19 @@ export async function POST(request: Request) {
 
     const userId = createData.user.id
 
-    const { error: usersError } = await admin.from('users').insert({
-      id: userId,
-      email,
-      full_name: fullName,
-      role: input.role,
-      status: 'active',
-    })
+    // Upsert, not insert: the on_auth_user_created trigger may have already
+    // created a placeholder row (role=participant, status=pending) the
+    // instant createUser() ran, before this code got here.
+    const { error: usersError } = await admin.from('users').upsert(
+      {
+        id: userId,
+        email,
+        full_name: fullName,
+        role: input.role,
+        status: 'active',
+      },
+      { onConflict: 'id' }
+    )
 
     if (usersError) {
       console.error('[create-account] users insert failed:', usersError)
