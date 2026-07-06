@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { postJson } from '@/lib/apiFetch'
-import { Check, X, School, Gavel, MessageSquareWarning, Clock } from 'lucide-react'
+import { Check, X, School, Gavel, MessageSquareWarning, Clock, Copy, CheckCircle2 } from 'lucide-react'
 
 interface Application {
   id: string
@@ -20,6 +20,8 @@ export default function AdminApprovalsPage() {
   const [awaitingApplicant, setAwaitingApplicant] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
+  const [newCredentials, setNewCredentials] = useState<{ email: string; password: string } | null>(null)
+  const [copied, setCopied] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -89,10 +91,22 @@ export default function AdminApprovalsPage() {
         alert('Error: ' + result.message)
         return
       }
+      if (action === 'approve' && result.data?.email && result.data?.password) {
+        setNewCredentials({ email: result.data.email, password: result.data.password })
+      }
       await loadApplications()
     } finally {
       setProcessingId(null)
     }
+  }
+
+  const copyCredentials = async () => {
+    if (!newCredentials) return
+    await navigator.clipboard.writeText(
+      `Email: ${newCredentials.email}\nPassword: ${newCredentials.password}`
+    )
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   if (loading) {
@@ -133,6 +147,41 @@ export default function AdminApprovalsPage() {
 
   return (
     <div className="premium-container fade-in">
+      {newCredentials && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px',
+          }}
+        >
+          <div className="glass-card" style={{ maxWidth: '460px', width: '100%', padding: '32px', borderLeft: '4px solid var(--success)' }}>
+            <h3 style={{ fontSize: '20px', marginBottom: '8px', color: 'var(--text-primary)' }}>Account approved</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '20px' }}>
+              Share these credentials with the applicant. They are also emailed automatically, but
+              this is the only time they will be shown here — copy them now if needed.
+            </p>
+            <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '16px', marginBottom: '20px', fontFamily: 'monospace', fontSize: '14px' }}>
+              <div style={{ marginBottom: '8px' }}><strong>Email:</strong> {newCredentials.email}</div>
+              <div><strong>Password:</strong> {newCredentials.password}</div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={copyCredentials} className="btn btn-secondary" style={{ padding: '10px 16px' }}>
+                {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? 'Copied' : 'Copy'}
+              </button>
+              <button onClick={() => setNewCredentials(null)} className="btn btn-success" style={{ padding: '10px 16px' }}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ marginBottom: '40px' }}>
         <h1 style={{ fontSize: '32px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>
           Account Approvals

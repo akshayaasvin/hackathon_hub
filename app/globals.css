@@ -673,6 +673,17 @@ body.body-landing-light {
   .premium-container { padding: 20px 14px !important; }
   .glass-card { padding: 20px 14px !important; }
   .premium-table { min-width: 600px !important; }
+  .table-container { position: relative; }
+  .table-container::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 28px;
+    background: linear-gradient(to right, transparent, rgba(0,0,0,0.08));
+    pointer-events: none;
+  }
   .modal-overlay > .glass-card { width: 95% !important; max-height: 90vh !important; }
   .responsive-grid-2, .responsive-grid-3 { grid-template-columns: 1fr !important; }
   .responsive-card-grid { grid-template-columns: 1fr !important; }
@@ -687,11 +698,12 @@ body.body-landing-light {
   .hero-grid-left { text-align: center !important; }
   .hero-stats-row { justify-content: center !important; }
   .scroll-indicator { display: none !important; }
-  .admin-layout-container { flex-direction: column !important; }
-  .admin-sidebar { width: 100% !important; flex-direction: row !important; padding: 10px 14px !important; border-right: none !important; border-bottom: 1px solid var(--border-color) !important; overflow-x: auto !important; white-space: nowrap !important; scrollbar-width: none; }
+  .admin-layout-container { flex-direction: column !important; min-height: auto !important; }
+  .admin-sidebar { width: 100% !important; min-height: auto !important; flex-direction: row !important; align-items: center !important; padding: 10px 14px !important; border-right: none !important; border-bottom: 1px solid var(--border-color) !important; overflow-x: auto !important; white-space: nowrap !important; scrollbar-width: none; }
   .admin-sidebar::-webkit-scrollbar { display: none; }
   .admin-sidebar-header { display: none !important; }
-  .admin-sidebar-links { flex-direction: row !important; gap: 6px !important; }
+  .admin-sidebar-links { flex-direction: row !important; align-items: center !important; gap: 6px !important; flex-shrink: 0; }
+  .admin-sidebar-links a { flex-shrink: 0; }
   .notification-dropdown { width: calc(100vw - 28px) !important; right: -60px !important; }
   .winners-podium { flex-direction: column !important; align-items: center !important; gap: 20px !important; }
   .flex-mobile-wrap { flex-direction: row !important; gap: 4% !important; width: 100% !important; justify-content: center !important; flex-wrap: nowrap !important; }

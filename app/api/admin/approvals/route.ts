@@ -216,7 +216,10 @@ export async function POST(request: Request) {
       }),
     })
 
-    return apiSuccess({ status: 'active' }, 'Account approved.')
+    return apiSuccess(
+      { status: 'active', email: applicantEmail, password: tempPassword },
+      'Account approved.'
+    )
   } catch (err: any) {
     console.error('[approvals] unhandled error:', err)
     return apiError('Something went wrong. Please try again.', 500)

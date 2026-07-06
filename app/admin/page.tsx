@@ -32,8 +32,11 @@ export default function AdminDashboard() {
     start_date: '',
     end_date: '',
     registration_deadline: '',
-    max_team_size: 5
+    max_team_size: 5,
+    razorpay_button_id: ''
   })
+  const [bannerFile, setBannerFile] = useState<File | null>(null)
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null)
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const supabase = createClient()
@@ -115,6 +118,22 @@ export default function AdminDashboard() {
     const endDate = formData.end_date ? new Date(formData.end_date).toISOString() : null
     const regDeadline = formData.registration_deadline ? new Date(formData.registration_deadline).toISOString() : null
 
+    let bannerUrl: string | null = null
+    if (bannerFile) {
+      const ext = bannerFile.name.split('.').pop()
+      const path = `${crypto.randomUUID()}.${ext}`
+      const { error: uploadError } = await supabase.storage
+        .from('hackathon-banners')
+        .upload(path, bannerFile, { upsert: false })
+
+      if (uploadError) {
+        alert('Error uploading banner: ' + uploadError.message)
+        setLoading(false)
+        return
+      }
+      bannerUrl = supabase.storage.from('hackathon-banners').getPublicUrl(path).data.publicUrl
+    }
+
     const { error } = await supabase.from('hackathons').insert({
       name: formData.name,
       description: formData.description,
@@ -126,6 +145,8 @@ export default function AdminDashboard() {
       end_date: endDate,
       registration_deadline: regDeadline,
       max_team_size: Number(formData.max_team_size),
+      banner_url: bannerUrl,
+      razorpay_button_id: formData.razorpay_button_id || null,
       status: 'draft',
       created_by: currentUserId,
     })
@@ -145,11 +166,20 @@ export default function AdminDashboard() {
         start_date: '',
         end_date: '',
         registration_deadline: '',
-        max_team_size: 5
+        max_team_size: 5,
+        razorpay_button_id: ''
       })
+      setBannerFile(null)
+      setBannerPreview(null)
       loadDashboardData()
     }
     setLoading(false)
+  }
+
+  const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null
+    setBannerFile(file)
+    setBannerPreview(file ? URL.createObjectURL(file) : null)
   }
 
   const updateHackathonStatus = async (id: string, newStatus: string) => {
@@ -436,7 +466,7 @@ export default function AdminDashboard() {
               />
             </div>
 
-            <div className="responsive-grid-2" style={{ marginBottom: '28px' }}>
+            <div className="responsive-grid-2" style={{ marginBottom: '20px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Max Team Size</label>
                 <input
@@ -447,6 +477,33 @@ export default function AdminDashboard() {
                   className="premium-input"
                 />
               </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Razorpay Button ID</label>
+                <input
+                  name="razorpay_button_id"
+                  value={formData.razorpay_button_id}
+                  onChange={handleChange}
+                  className="premium-input"
+                  placeholder="e.g. pl_ABC123xyz (from Razorpay dashboard)"
+                />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '28px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Banner / Cover Photo</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleBannerChange}
+                className="premium-input"
+              />
+              {bannerPreview && (
+                <img
+                  src={bannerPreview}
+                  alt="Banner preview"
+                  style={{ marginTop: '12px', maxWidth: '100%', maxHeight: '200px', borderRadius: '10px', objectFit: 'cover' }}
+                />
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: '12px' }}>

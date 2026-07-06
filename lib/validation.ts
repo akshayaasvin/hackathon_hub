@@ -19,6 +19,7 @@ export const participantRegisterSchema = z.object({
   experience_level: z.enum(['fresher', 'experienced']),
   contact_number: phone,
   address: z.string().trim().min(5, 'Address is required'),
+  date_of_birth: z.string().trim().min(1, 'Date of birth is required'),
 })
 export type ParticipantRegisterInput = z.infer<typeof participantRegisterSchema>
 
@@ -27,7 +28,6 @@ export const collegeRegisterSchema = z.object({
   college_name: z.string().trim().min(2, 'College name is required'),
   representative_name: z.string().trim().min(2, "Representative's name is required"),
   position_in_college: z.string().trim().min(2, 'Position is required'),
-  date_of_birth: z.string().trim().optional().or(z.literal('')),
   official_email: z.email('Enter a valid official email address'),
   personal_email: z.email('Enter a valid personal email address').optional().or(z.literal('')),
   contact_number: phone,
@@ -46,7 +46,6 @@ export const juryRegisterSchema = z.object({
   portfolio_url: z.url('Enter a valid URL').optional().or(z.literal('')),
   occupation: z.string().trim().min(2, 'Occupation is required'),
   experience_years: z.coerce.number().int().min(0).max(60).optional(),
-  date_of_birth: z.string().trim().optional().or(z.literal('')),
   location: z.string().trim().min(2, 'Location is required'),
 })
 export type JuryRegisterInput = z.infer<typeof juryRegisterSchema>

@@ -41,6 +41,13 @@ export default function FeaturedHackathons() {
       {hackathons.map((h) => (
         <div key={h.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div>
+            {h.banner_url && (
+              <img
+                src={h.banner_url}
+                alt={h.name}
+                style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '10px', marginBottom: '14px' }}
+              />
+            )}
             <span
               style={{
                 display: 'inline-block',

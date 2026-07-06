@@ -20,6 +20,7 @@ export interface ParticipantProfile {
   experience_level: 'fresher' | 'experienced'
   contact_number: string
   address: string
+  date_of_birth: string | null
   created_at: string
   updated_at: string
 }
@@ -111,6 +112,7 @@ export interface Hackathon {
   end_date: string
   prize_details: string | null
   max_team_size: number
+  razorpay_button_id: string | null
   status: 'draft' | 'published' | 'ongoing' | 'completed'
   created_by: string | null
   created_at: string

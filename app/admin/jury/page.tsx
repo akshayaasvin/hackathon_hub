@@ -29,7 +29,6 @@ export default function AdminJuryPage() {
     portfolio_url: '',
     occupation: '',
     experience_years: '',
-    date_of_birth: '',
     location: '',
     password: '',
   }
@@ -267,7 +266,6 @@ export default function AdminJuryPage() {
                   ['portfolio_url', 'Portfolio / Website', 'text'],
                   ['occupation', 'Occupation', 'text'],
                   ['experience_years', 'Years of Experience', 'number'],
-                  ['date_of_birth', 'Date of Birth', 'date'],
                   ['location', 'Location', 'text'],
                   ['password', 'Password', 'password'],
                 ] as const).map(([key, label, type]) => (

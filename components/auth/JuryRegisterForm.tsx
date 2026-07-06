@@ -21,7 +21,6 @@ export function JuryRegisterForm({ onSuccess }: { onSuccess: (status: string) =>
     portfolio_url: '',
     occupation: '',
     experience_years: '',
-    date_of_birth: '',
     location: '',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -120,9 +119,6 @@ export function JuryRegisterForm({ onSuccess }: { onSuccess: (status: string) =>
             value={form.experience_years}
             onChange={set('experience_years')}
           />
-        </FormField>
-        <FormField label="Date of Birth" error={errors.date_of_birth}>
-          <input type="date" className="premium-input" value={form.date_of_birth} onChange={set('date_of_birth')} />
         </FormField>
         <FormField label="Location / Address" error={errors.location}>
           <input className="premium-input" value={form.location} onChange={set('location')} required />

@@ -87,7 +87,6 @@ export async function POST(request: Request) {
         college_name: input.college_name,
         representative_name: input.representative_name,
         position_in_college: input.position_in_college,
-        date_of_birth: input.date_of_birth || null,
         official_email: input.official_email,
         personal_email: input.personal_email || null,
         contact_number: input.contact_number,
@@ -106,7 +105,6 @@ export async function POST(request: Request) {
         portfolio_url: input.portfolio_url || null,
         occupation: input.occupation,
         experience_years: input.experience_years ?? null,
-        date_of_birth: input.date_of_birth || null,
         location: input.location,
       })
       profileError = error

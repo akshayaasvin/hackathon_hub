@@ -16,7 +16,6 @@ export function CollegeRegisterForm({ onSuccess }: { onSuccess: (status: string)
     college_name: '',
     representative_name: '',
     position_in_college: '',
-    date_of_birth: '',
     official_email: '',
     personal_email: '',
     contact_number: '',
@@ -96,9 +95,6 @@ export function CollegeRegisterForm({ onSuccess }: { onSuccess: (status: string)
             onChange={set('position_in_college')}
             required
           />
-        </FormField>
-        <FormField label="Date of Birth" error={errors.date_of_birth}>
-          <input type="date" className="premium-input" value={form.date_of_birth} onChange={set('date_of_birth')} />
         </FormField>
         <FormField label="Official (Work) Email" error={errors.official_email}>
           <input

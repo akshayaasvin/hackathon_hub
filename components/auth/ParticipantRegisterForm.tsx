@@ -23,6 +23,7 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
     experience_level: 'fresher',
     contact_number: '',
     address: '',
+    date_of_birth: '',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [serverError, setServerError] = useState('')
@@ -127,6 +128,15 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
         </FormField>
         <FormField label="Contact Number" error={errors.contact_number}>
           <input className="premium-input" value={form.contact_number} onChange={set('contact_number')} required />
+        </FormField>
+        <FormField label="Date of Birth" error={errors.date_of_birth}>
+          <input
+            type="date"
+            className="premium-input"
+            value={form.date_of_birth}
+            onChange={set('date_of_birth')}
+            required
+          />
         </FormField>
       </div>
 

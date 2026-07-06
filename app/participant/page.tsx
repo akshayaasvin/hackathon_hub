@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Calendar, Users, Send, PlusCircle, CheckCircle, Clock } from 'lucide-react'
 import { withTimeout } from '@/lib/utils'
+import { RazorpayButton } from '@/components/RazorpayButton'
 
 export default function ParticipantDashboard() {
   const [user, setUser] = useState<any>(null)
@@ -429,8 +430,15 @@ export default function ParticipantDashboard() {
             const isRegistered = registeredIds.has(hackathon.id)
             
             return (
-              <div key={hackathon.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div key={hackathon.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', overflow: 'hidden' }}>
                 <div>
+                  {hackathon.banner_url && (
+                    <img
+                      src={hackathon.banner_url}
+                      alt={hackathon.name}
+                      style={{ width: '100%', height: '160px', objectFit: 'cover', borderRadius: '10px', marginBottom: '16px' }}
+                    />
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '16px' }}>
                     <h3 style={{ fontSize: '18px', color: 'var(--text-primary)' }}>{hackathon.name}</h3>
                     {isRegistered && statusDisplay && (
@@ -451,7 +459,18 @@ export default function ParticipantDashboard() {
                     )}
                   </div>
                   
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.6', marginBottom: '20px' }}>
+                  <p
+                    style={{
+                      color: 'var(--text-secondary)',
+                      fontSize: '14px',
+                      lineHeight: '1.6',
+                      marginBottom: '20px',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 4,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
                     {hackathon.description || 'No description provided.'}
                   </p>
                   
@@ -482,7 +501,7 @@ export default function ParticipantDashboard() {
                       )}
                     </div>
                   ) : (
-                    <button 
+                    <button
                       onClick={() => handleRegister(hackathon.id)}
                       disabled={actionLoading}
                       className="btn btn-primary"
@@ -490,6 +509,11 @@ export default function ParticipantDashboard() {
                     >
                       {actionLoading ? 'Registering...' : 'Register for Hackathon'}
                     </button>
+                  )}
+                  {hackathon.razorpay_button_id && (
+                    <div style={{ marginTop: '12px', textAlign: 'center' }}>
+                      <RazorpayButton buttonId={hackathon.razorpay_button_id} />
+                    </div>
                   )}
                 </div>
               </div>

@@ -137,6 +137,7 @@ export async function POST(request: Request) {
         experience_level: input.experience_level,
         contact_number: input.contact_number,
         address: input.address,
+        date_of_birth: input.date_of_birth,
       })
 
       if (profileError) {
@@ -163,7 +164,6 @@ export async function POST(request: Request) {
           college_name: collegeInput.college_name,
           representative_name: collegeInput.representative_name,
           position_in_college: collegeInput.position_in_college,
-          date_of_birth: collegeInput.date_of_birth || null,
           official_email: collegeInput.official_email,
           personal_email: collegeInput.personal_email || null,
           contact_number: collegeInput.contact_number,
@@ -192,7 +192,6 @@ export async function POST(request: Request) {
       portfolio_url: juryInput.portfolio_url || null,
       occupation: juryInput.occupation,
       experience_years: juryInput.experience_years ?? null,
-      date_of_birth: juryInput.date_of_birth || null,
       location: juryInput.location,
     })
     if (error) return apiError(error, 400)
