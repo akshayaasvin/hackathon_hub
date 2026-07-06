@@ -8,6 +8,7 @@ import { Award, Download, ShieldCheck, Calendar, Sparkles } from 'lucide-react'
 export default function CertificatesPage() {
   const [user, setUser] = useState<any>(null)
   const [myCertificates, setMyCertificates] = useState<any[]>([])
+  const [awaitingResults, setAwaitingResults] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const router = useRouter()
@@ -66,7 +67,26 @@ export default function CertificatesPage() {
       })
 
       setMyCertificates(enrichedCertificates)
-      
+
+      // Hackathons this user submitted a project for, but no certificate has
+      // been issued yet (admin hasn't declared winners for it) — show a
+      // placeholder instead of just omitting them, per the "certificate
+      // available after results are announced" requirement.
+      const { data: submittedRegistrations } = await supabase
+        .from('registrations')
+        .select('hackathon_id')
+        .eq('user_id', user.id)
+        .eq('status', 'submitted')
+
+      const certifiedHackathonIds = new Set((certificates || []).map((c: any) => c.hackathon_id))
+      const pending = (submittedRegistrations || [])
+        .filter((r: any) => !certifiedHackathonIds.has(r.hackathon_id))
+        .map((r: any) => ({
+          hackathon_id: r.hackathon_id,
+          hackathon_name: hackathons?.find((h) => h.id === r.hackathon_id)?.name || 'Unknown Hackathon',
+        }))
+      setAwaitingResults(pending)
+
     } catch (error) {
       console.error('Error:', error)
     } finally {
@@ -229,16 +249,29 @@ export default function CertificatesPage() {
         <p style={{ color: 'var(--text-secondary)' }}>Audit and download secure certificate files for verified hackathon placements.</p>
       </div>
       
-      {myCertificates.length === 0 ? (
-        <div className="glass-card" style={{ 
-          textAlign: 'center', 
-          padding: '60px 40px', 
+      {awaitingResults.length > 0 && (
+        <div style={{ marginBottom: '32px' }}>
+          <div className="responsive-card-grid">
+            {awaitingResults.map((item) => (
+              <div key={item.hackathon_id} className="glass-card" style={{ borderLeft: '4px solid var(--border-color)', textAlign: 'center', padding: '32px 24px' }}>
+                <strong style={{ display: 'block', marginBottom: '8px', color: 'var(--text-primary)' }}>{item.hackathon_name}</strong>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Certificate available after results are announced.</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {myCertificates.length === 0 && awaitingResults.length === 0 ? (
+        <div className="glass-card" style={{
+          textAlign: 'center',
+          padding: '60px 40px',
           borderLeft: '4px solid var(--primary)'
         }}>
           <p style={{ fontSize: '16px', color: 'var(--text-primary)', marginBottom: '8px' }}>No Certificates Awarded Yet</p>
           <p style={{ color: 'var(--text-secondary)' }}>Certificates are dispatched automatically when organizers announce winning placements.</p>
         </div>
-      ) : (
+      ) : myCertificates.length > 0 ? (
         <div className="responsive-card-grid">
           {myCertificates.map((cert) => {
             const isFirst = cert.rank === 1
@@ -285,7 +318,7 @@ export default function CertificatesPage() {
             )
           })}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

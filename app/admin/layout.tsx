@@ -15,6 +15,7 @@ import {
   Gavel,
   Users,
   ShieldCheck,
+  CreditCard,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { RoleLoginGate } from '@/components/auth/RoleLoginGate'
@@ -74,6 +75,7 @@ export default function AdminLayout({
   const navItems = [
     { href: '/admin', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
     { href: '/admin/approvals', label: 'Account Approvals', icon: <CheckSquare size={18} /> },
+    { href: '/admin/registrations', label: 'Payment Approvals', icon: <CreditCard size={18} /> },
     { href: '/admin/applications', label: 'Applications', icon: <FileSpreadsheet size={18} /> },
     { href: '/admin/submissions', label: 'Submissions', icon: <Send size={18} /> },
     { href: '/admin/announcements', label: 'Announcements', icon: <Megaphone size={18} /> },
