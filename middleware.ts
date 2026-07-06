@@ -31,8 +31,18 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
   const path = request.nextUrl.pathname
+
+  // TEMP DEBUG — remove before finalizing
+  console.log('[mw-debug]', {
+    path,
+    hasUser: !!user,
+    userId: user?.id,
+    userEmail: user?.email,
+    userError: userError?.message,
+    incomingCookieNames: request.cookies.getAll().map((c) => c.name),
+  })
 
   const getDashboardUrl = (r: string) => {
     if (r === 'admin') return '/admin'
@@ -41,16 +51,26 @@ export async function middleware(request: NextRequest) {
     return '/participant'
   }
 
+  // Diagnostic pages always render — never gated behind a role/status lookup,
+  // since they exist specifically to report when that lookup itself fails.
+  if (path === '/auth-error' || path === '/access-denied') {
+    return response
+  }
+
   // Public/Auth routes
   // /jury/register is intentionally not linked anywhere public, but it must
   // stay reachable by a judge who has the direct URL — same gating as /register.
   if (path === '/' || path === '/login' || path === '/register' || path === '/jury/register') {
     if (user && path !== '/') {
-      const { data: userData } = await supabase
+      const { data: userData, error: userDataError } = await supabase
         .from('users')
         .select('role, status')
         .eq('id', user.id)
         .single()
+      if (userDataError && userDataError.code !== 'PGRST116') {
+        console.error('[middleware] role/status lookup failed:', userDataError)
+        return NextResponse.redirect(new URL('/auth-error', request.url))
+      }
       if (userData?.status === 'pending') {
         return NextResponse.redirect(new URL('/pending-approval', request.url))
       }
@@ -69,11 +89,24 @@ export async function middleware(request: NextRequest) {
   }
 
   // Fetch role + status
-  const { data: userData } = await supabase
+  const { data: userData, error: userDataError } = await supabase
     .from('users')
     .select('role, status')
     .eq('id', user.id)
     .single()
+
+  // TEMP DEBUG — remove before finalizing
+  console.log('[mw-debug] role check', { path, userData, userDataError: userDataError?.message })
+
+  // PGRST116 just means "no row yet" (e.g. a brand-new signup mid-flight) — that's
+  // expected and handled by the pending/rejected defaults below. Any other error
+  // (e.g. a database-side failure) is a real problem; don't silently misroute
+  // someone into the wrong dashboard or an incorrect pending/rejected screen.
+  if (userDataError && userDataError.code !== 'PGRST116') {
+    console.error('[middleware] role/status lookup failed:', userDataError)
+    return NextResponse.redirect(new URL('/auth-error', request.url))
+  }
+
   const role = userData?.role || 'participant'
   const status = userData?.status || 'pending'
 
@@ -94,7 +127,7 @@ export async function middleware(request: NextRequest) {
 
   // Role Checks
   if (path.startsWith('/admin') && role !== 'admin') {
-    return NextResponse.redirect(new URL(getDashboardUrl(role), request.url))
+    return NextResponse.redirect(new URL('/access-denied', request.url))
   }
 
   if (path.startsWith('/jury') && role !== 'jury') {
