@@ -6,7 +6,7 @@ import HeroIllustration from '@/components/HeroIllustration'
 import FeaturedHackathons from '@/components/landing/FeaturedHackathons'
 import {
   Trophy, Rocket, Cpu, Code, GitFork, Award,
-  ArrowRight, Zap,
+  ArrowRight, Zap, Users,
   UserPlus, Gavel, School, GraduationCap,
   DollarSign, Compass, ShieldCheck, ChevronDown
 } from 'lucide-react'
@@ -70,6 +70,15 @@ const benefits = [
     title: 'Student to founder, one hackathon at a time',
     desc: 'HackathonHub is built to be the first step in a longer founder journey — mentorship and momentum, not just a weekend event.',
   },
+]
+
+const platformFeatures = [
+  { icon: <Trophy size={22} />, title: 'Live leaderboard', desc: 'Real-time rankings once judging closes on a hackathon — no waiting on a spreadsheet.' },
+  { icon: <Users size={22} />, title: 'Team collaboration', desc: 'Form a team, invite members by email, and manage your submission together from one dashboard.' },
+  { icon: <School size={22} />, title: 'Institution dashboard', desc: "Institutions track every student's registration, team, and result in real time." },
+  { icon: <Award size={22} />, title: 'Digital certificates', desc: 'Every certificate ships with a unique verification code — shareable, checkable proof, not a PDF anyone could fake.' },
+  { icon: <Gavel size={22} />, title: 'Structured jury evaluation', desc: 'A transparent five-category rubric scores every submission the same way, every time.' },
+  { icon: <Zap size={22} />, title: 'Real-time status updates', desc: 'Know exactly where your application or submission stands, from registration through results.' },
 ]
 
 const steps = [
@@ -162,13 +171,12 @@ export default function Home() {
                   letterSpacing: '-0.04em', lineHeight: '1.06'
                 }}
               >
-                Turn Your Idea Into a Funded Startup
+                Turn Your Innovation Into the Next Big Startup
               </h1>
 
               <p style={{ fontSize: '17px', color: 'var(--text-secondary)', lineHeight: '1.65', marginBottom: '32px', maxWidth: '560px' }}>
-                Register, build with a team, and pitch to real industry jury. Every participant earns a
-                verifiable certificate, top teams win prize money and mentorship, and standout projects get
-                a path to funding — with your college recognized for backing you.
+                Build. Collaborate. Compete. Win funding, internships, certificates, and industry
+                recognition through expert-led hackathons.
               </p>
 
               <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }} className="flex-mobile-wrap">
@@ -176,8 +184,8 @@ export default function Home() {
                   Register Now
                   <ArrowRight size={17} className="cta-arrow" style={{ transition: 'transform 0.3s' }} />
                 </a>
-                <a href="/login" className="btn-cta-secondary-bright">
-                  Login to Dashboard
+                <a href="#featured-hackathons" className="btn-cta-secondary-bright">
+                  Explore Hackathons
                 </a>
               </div>
 
@@ -232,6 +240,23 @@ export default function Home() {
         </div>
       </RevealOnScroll>
 
+      {/* ── PLATFORM FEATURES ── */}
+      <RevealOnScroll>
+        <div className="premium-container" style={{ width: '100%' }}>
+          <h2 className="section-title">What's Inside the Platform</h2>
+          <p className="section-subtitle">The mechanics that make it more than a signup form.</p>
+          <div className="features-grid">
+            {platformFeatures.map((item) => (
+              <div key={item.title} className="premium-feature-card">
+                <div className="feature-icon-wrapper">{item.icon}</div>
+                <h3 className="feature-title">{item.title}</h3>
+                <p className="feature-desc">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </RevealOnScroll>
+
       {/* ── HOW IT WORKS ── */}
       <RevealOnScroll>
         <div className="premium-container" style={{ width: '100%' }}>
@@ -253,7 +278,7 @@ export default function Home() {
 
       {/* ── FEATURED HACKATHONS ── */}
       <RevealOnScroll>
-        <div className="premium-container" style={{ width: '100%' }}>
+        <div id="featured-hackathons" className="premium-container" style={{ width: '100%' }}>
           <h2 className="section-title">Featured Hackathons</h2>
           <p className="section-subtitle">Open for registration right now.</p>
           <div style={{ marginBottom: '24px' }}>
@@ -306,15 +331,15 @@ export default function Home() {
           <div className="glass-card-saas" style={{ padding: '56px 40px', textAlign: 'center', maxWidth: '760px', margin: '0 auto' }}>
             <Compass size={28} color="var(--primary)" style={{ marginBottom: '16px' }} />
             <h2 style={{ fontSize: '30px', fontFamily: 'var(--font-display)', fontWeight: 800, marginBottom: '14px', color: 'var(--text-primary)' }}>
-              Ready to build something real?
+              Ready to Build the Future?
             </h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '15px', marginBottom: '32px', maxWidth: '480px', marginLeft: 'auto', marginRight: 'auto' }}>
-              Whether you're a student with an idea, a college backing your students, or an expert ready to
-              mentor — there's a seat for you.
+              Whether you're an individual with an idea, an institution backing your students, or an expert
+              ready to mentor — there's a seat for you.
             </p>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }} className="flex-mobile-wrap">
               <a href="/register" className="btn-cta-primary-bright">
-                Register Now <ArrowRight size={17} />
+                Start Your Journey <ArrowRight size={17} />
               </a>
               <a href="/login" className="btn-cta-secondary-bright">
                 Login to Dashboard
