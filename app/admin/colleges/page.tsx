@@ -11,6 +11,11 @@ export default function AdminCollegesPage() {
   const [participants, setParticipants] = useState<any[]>([])
   const [teamMembers, setTeamMembers] = useState<any[]>([])
   const [evaluations, setEvaluations] = useState<any[]>([])
+  const [hackathons, setHackathons] = useState<any[]>([])
+  const [registrations, setRegistrations] = useState<any[]>([])
+  const [teams, setTeams] = useState<any[]>([])
+  const [submissions, setSubmissions] = useState<any[]>([])
+  const [selectedHackathonId, setSelectedHackathonId] = useState('')
 
   const [searchQuery, setSearchQuery] = useState('')
   const [studentSearchQuery, setStudentSearchQuery] = useState('')
@@ -43,12 +48,20 @@ export default function AdminCollegesPage() {
   const loadColleges = async () => {
     try {
       setLoading(true)
-      const [usersRes, participantsRes, teamMembersRes, evaluationsRes] = await Promise.all([
+      const [usersRes, participantsRes, teamMembersRes, evaluationsRes, hackathonsRes, registrationsRes, teamsRes, submissionsRes] = await Promise.all([
         supabase.from('users').select('*').eq('role', 'college'),
         supabase.from('participant_profiles').select('*'),
         supabase.from('team_members').select('*'),
         supabase.from('evaluations').select('*'),
+        supabase.from('hackathons').select('id, name').order('created_at', { ascending: false }),
+        supabase.from('registrations').select('hackathon_id, user_id'),
+        supabase.from('teams').select('id, hackathon_id'),
+        supabase.from('submissions').select('id, team_id'),
       ])
+      setHackathons(hackathonsRes.data || [])
+      setRegistrations(registrationsRes.data || [])
+      setTeams(teamsRes.data || [])
+      setSubmissions(submissionsRes.data || [])
 
       const userList = usersRes.data || []
       const { data: profiles } = userList.length
@@ -140,6 +153,42 @@ export default function AdminCollegesPage() {
       .slice(0, 3)
   }
 
+  const getHackathonScopedStats = () => {
+    if (!selectedHackathonId) return []
+
+    const regsForHackathon = registrations.filter((r) => r.hackathon_id === selectedHackathonId)
+    const registeredUserIds = new Set(regsForHackathon.map((r) => r.user_id))
+    const teamsForHackathon = teams.filter((t) => t.hackathon_id === selectedHackathonId)
+    const teamIdsForHackathon = new Set(teamsForHackathon.map((t) => t.id))
+    const submissionsForHackathon = submissions.filter((s) => teamIdsForHackathon.has(s.team_id))
+
+    return colleges.map((col) => {
+      const collegeName = col.profile?.college_name
+      const collegeStudentUserIds = new Set(
+        participants.filter((p) => p.college_name === collegeName).map((p) => p.user_id)
+      )
+
+      const registeredCount = [...registeredUserIds].filter((uid) => collegeStudentUserIds.has(uid)).length
+
+      const collegeTeamIds = new Set(
+        teamsForHackathon
+          .filter((t) => teamMembers.some((tm) => tm.team_id === t.id && collegeStudentUserIds.has(tm.user_id)))
+          .map((t) => t.id)
+      )
+
+      const submissionsCount = submissionsForHackathon.filter((s) => collegeTeamIds.has(s.team_id)).length
+
+      return {
+        ...col,
+        registeredCount,
+        teamsCount: collegeTeamIds.size,
+        submissionsCount,
+      }
+    })
+  }
+
+  const hackathonScopedStats = getHackathonScopedStats()
+
   const sortedColleges = [...colleges].sort((a, b) =>
     (a.profile?.college_name || '').localeCompare(b.profile?.college_name || '')
   )
@@ -169,6 +218,53 @@ export default function AdminCollegesPage() {
         <button onClick={handleOpenCreate} className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
           <Plus size={18} /> Create College
         </button>
+      </div>
+
+      <div className="glass-card" style={{ padding: '24px', marginBottom: '40px' }}>
+        <h2 style={{ fontSize: '20px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>Hackathon Participation</h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '16px' }}>
+          Pick a hackathon to see each college's registrations, teams, and submissions for that event specifically.
+        </p>
+        <select
+          className="premium-input premium-select"
+          style={{ maxWidth: '320px', marginBottom: selectedHackathonId ? '20px' : 0 }}
+          value={selectedHackathonId}
+          onChange={(e) => setSelectedHackathonId(e.target.value)}
+        >
+          <option value="">Select a hackathon</option>
+          {hackathons.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+        </select>
+
+        {selectedHackathonId && (
+          <div className="table-container">
+            <table className="premium-table">
+              <thead>
+                <tr>
+                  <th>College Name</th>
+                  <th>Registered Students</th>
+                  <th>Teams Formed</th>
+                  <th>Submissions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hackathonScopedStats.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>No colleges found.</td>
+                  </tr>
+                ) : (
+                  hackathonScopedStats.map((col) => (
+                    <tr key={col.id}>
+                      <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{col.profile?.college_name || '-'}</td>
+                      <td>{col.registeredCount}</td>
+                      <td>{col.teamsCount}</td>
+                      <td>{col.submissionsCount}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {top3Colleges.length > 0 && (

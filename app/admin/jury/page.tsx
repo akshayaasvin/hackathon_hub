@@ -98,13 +98,13 @@ export default function AdminJuryPage() {
       return
     }
     setActionLoading(true)
-    const { error } = await supabase.from('judge_assignments').insert({
-      hackathon_id: assignHackathonId,
-      team_id: assignTeamId,
-      judge_id: assignJudgeId,
+    const result = await postJson('/api/admin/judge-assignments', {
+      hackathonId: assignHackathonId,
+      teamId: assignTeamId,
+      judgeId: assignJudgeId,
     })
-    if (error) {
-      alert('Error: ' + error.message)
+    if (!result.success) {
+      alert('Error: ' + result.message)
     } else {
       setAssignTeamId('')
       setAssignJudgeId('')
@@ -115,8 +115,10 @@ export default function AdminJuryPage() {
 
   const handleUnassign = async (id: string) => {
     setActionLoading(true)
-    const { error } = await supabase.from('judge_assignments').delete().eq('id', id)
-    if (error) alert('Error: ' + error.message)
+    const result = await fetch(`/api/admin/judge-assignments?id=${id}`, { method: 'DELETE' })
+      .then((r) => r.json())
+      .catch(() => ({ success: false, message: 'Network error.' }))
+    if (!result.success) alert('Error: ' + result.message)
     await loadAll()
     setActionLoading(false)
   }
