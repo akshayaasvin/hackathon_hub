@@ -31,18 +31,8 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user }, error: userError } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
   const path = request.nextUrl.pathname
-
-  // TEMP DEBUG — remove before finalizing
-  console.log('[mw-debug]', {
-    path,
-    hasUser: !!user,
-    userId: user?.id,
-    userEmail: user?.email,
-    userError: userError?.message,
-    incomingCookieNames: request.cookies.getAll().map((c) => c.name),
-  })
 
   const getDashboardUrl = (r: string) => {
     if (r === 'admin') return '/admin'
@@ -94,9 +84,6 @@ export async function middleware(request: NextRequest) {
     .select('role, status')
     .eq('id', user.id)
     .single()
-
-  // TEMP DEBUG — remove before finalizing
-  console.log('[mw-debug] role check', { path, userData, userDataError: userDataError?.message })
 
   // PGRST116 just means "no row yet" (e.g. a brand-new signup mid-flight) — that's
   // expected and handled by the pending/rejected defaults below. Any other error
