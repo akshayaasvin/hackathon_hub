@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Gavel, Mail, User, Trash2 } from 'lucide-react'
+import { Plus, Gavel, Mail, User, Trash2, Copy, CheckCircle2 } from 'lucide-react'
 import { adminCreateJurySchema } from '@/lib/validation'
 import { postJson } from '@/lib/apiFetch'
 
@@ -15,6 +15,8 @@ export default function AdminJuryPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [newCredentials, setNewCredentials] = useState<{ email: string; password: string } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const [assignHackathonId, setAssignHackathonId] = useState('')
   const [assignTeamId, setAssignTeamId] = useState('')
@@ -30,7 +32,6 @@ export default function AdminJuryPage() {
     occupation: '',
     experience_years: '',
     location: '',
-    password: '',
   }
   const [formData, setFormData] = useState(emptyForm)
 
@@ -45,7 +46,7 @@ export default function AdminJuryPage() {
       setLoading(true)
       const [usersRes, hackathonsRes, teamsRes, assignmentsRes] = await Promise.all([
         supabase.from('users').select('*').eq('role', 'jury'),
-        supabase.from('hackathons').select('*').order('created_at', { ascending: false }),
+        supabase.from('hackathons').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
         supabase.from('teams').select('*'),
         supabase.from('judge_assignments').select('*'),
       ])
@@ -78,15 +79,40 @@ export default function AdminJuryPage() {
     setErrors({})
     setActionLoading(true)
     try {
-      const result = await postJson('/api/admin/create-account', parsed.data)
+      const result = await postJson<{ email: string; password: string }>('/api/admin/create-account', parsed.data)
       if (!result.success) {
         alert('Error: ' + result.message)
         return
       }
-      alert('Jury account created and activated.')
       setFormData(emptyForm)
       setShowAddModal(false)
+      if (result.data) {
+        setNewCredentials({ email: result.data.email, password: result.data.password })
+      }
       await loadAll()
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const copyCredentials = async () => {
+    if (!newCredentials) return
+    await navigator.clipboard.writeText(`Email: ${newCredentials.email}\nPassword: ${newCredentials.password}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleResetPassword = async (userId: string) => {
+    setActionLoading(true)
+    try {
+      const result = await postJson<{ email: string; password: string }>('/api/admin/reset-password', { userId })
+      if (!result.success) {
+        alert('Error: ' + result.message)
+        return
+      }
+      if (result.data) {
+        setNewCredentials({ email: result.data.email, password: result.data.password })
+      }
     } finally {
       setActionLoading(false)
     }
@@ -131,6 +157,29 @@ export default function AdminJuryPage() {
 
   return (
     <div className="premium-container fade-in" style={{ padding: '40px' }}>
+      {newCredentials && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="glass-card" style={{ maxWidth: '460px', width: '100%', padding: '32px', borderLeft: '4px solid var(--success)' }}>
+            <h3 style={{ fontSize: '20px', marginBottom: '8px', color: 'var(--text-primary)' }}>Jury account created</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '20px' }}>
+              Share these credentials with the jury member. This is the only time the password is shown — copy it now.
+            </p>
+            <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '16px', marginBottom: '20px', fontFamily: 'monospace', fontSize: '14px' }}>
+              <div style={{ marginBottom: '8px' }}><strong>Email:</strong> {newCredentials.email}</div>
+              <div><strong>Password:</strong> {newCredentials.password}</div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={copyCredentials} className="btn btn-secondary" style={{ padding: '10px 16px' }}>
+                {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? 'Copied' : 'Copy'}
+              </button>
+              <button onClick={() => setNewCredentials(null)} className="btn btn-success" style={{ padding: '10px 16px' }}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
         <div>
           <h1 style={{ fontSize: '32px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>Jury Panel</h1>
@@ -153,12 +202,13 @@ export default function AdminJuryPage() {
               <th>Occupation</th>
               <th>Status</th>
               <th>Joined</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {juryList.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No jury members registered.</td>
+                <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No jury members registered.</td>
               </tr>
             ) : (
               juryList.map((j) => (
@@ -184,6 +234,16 @@ export default function AdminJuryPage() {
                     </span>
                   </td>
                   <td>{new Date(j.created_at).toLocaleDateString()}</td>
+                  <td>
+                    <button
+                      onClick={() => handleResetPassword(j.id)}
+                      disabled={actionLoading}
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 12px', fontSize: '13px' }}
+                    >
+                      Reset Password
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
@@ -269,7 +329,6 @@ export default function AdminJuryPage() {
                   ['occupation', 'Occupation', 'text'],
                   ['experience_years', 'Years of Experience', 'number'],
                   ['location', 'Location', 'text'],
-                  ['password', 'Password', 'password'],
                 ] as const).map(([key, label, type]) => (
                   <div key={key}>
                     <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{label}</label>
@@ -283,6 +342,10 @@ export default function AdminJuryPage() {
                   </div>
                 ))}
               </div>
+
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                A secure password is generated automatically and shown once after creation, so you can copy and share it.
+              </p>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                 <button type="button" onClick={() => setShowAddModal(false)} className="btn btn-secondary" style={{ padding: '8px 16px' }}>Cancel</button>

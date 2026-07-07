@@ -1,7 +1,12 @@
+import crypto from 'crypto'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { adminCreateSchema } from '@/lib/validation'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
+
+function randomPassword() {
+  return crypto.randomBytes(9).toString('base64url')
+}
 
 async function requireAdmin() {
   const supabase = await createClient()
@@ -48,9 +53,10 @@ export async function POST(request: Request) {
       return apiError('Something went wrong. Please try again later.', 500)
     }
 
+    const generatedPassword = randomPassword()
     const { data: createData, error: createError } = await admin.auth.admin.createUser({
       email,
-      password: input.password,
+      password: generatedPassword,
       email_confirm: true,
     })
 
@@ -117,7 +123,7 @@ export async function POST(request: Request) {
       return apiError('Could not save profile details. Please try again.', 500)
     }
 
-    return apiSuccess({ id: userId, role: input.role }, 'Account created.')
+    return apiSuccess({ id: userId, role: input.role, email, password: generatedPassword }, 'Account created.')
   } catch (err: any) {
     console.error('[create-account] unhandled error:', err)
     return apiError('Something went wrong. Please try again.', 500)

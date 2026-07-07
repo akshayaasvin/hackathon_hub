@@ -37,6 +37,9 @@ export default function AdminDashboard() {
   })
   const [bannerFile, setBannerFile] = useState<File | null>(null)
   const [bannerPreview, setBannerPreview] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<any>(null)
+  const [deleteCounts, setDeleteCounts] = useState<{ teams: number; submissions: number; registrations: number } | null>(null)
+  const [deletingHackathon, setDeletingHackathon] = useState(false)
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const supabase = createClient()
@@ -76,7 +79,7 @@ export default function AdminDashboard() {
       // Fetch hackathons, registrations and teams in parallel with 5s timeout
       const [hackathonsRes, pendingRes, teamsRes] = await withTimeout(
         Promise.all([
-          supabase.from('hackathons').select('*').order('created_at', { ascending: false }),
+          supabase.from('hackathons').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
           supabase.from('registrations').select('*', { count: 'exact', head: true }).eq('registration_status', 'pending'),
           supabase.from('teams').select('*', { count: 'exact', head: true })
         ]),
@@ -193,6 +196,48 @@ export default function AdminDashboard() {
     } else {
       alert(`Hackathon status updated to ${newStatus}!`)
       loadDashboardData()
+    }
+  }
+
+  const handleOpenDeleteConfirm = async (hackathon: any) => {
+    setDeleteTarget(hackathon)
+    setDeleteCounts(null)
+
+    const { data: teamRows } = await supabase.from('teams').select('id').eq('hackathon_id', hackathon.id)
+    const teamIds = (teamRows || []).map((t: any) => t.id)
+
+    const [registrationsRes, submissionsRes] = await Promise.all([
+      supabase.from('registrations').select('*', { count: 'exact', head: true }).eq('hackathon_id', hackathon.id),
+      teamIds.length
+        ? supabase.from('submissions').select('*', { count: 'exact', head: true }).in('team_id', teamIds)
+        : Promise.resolve({ count: 0 }),
+    ])
+
+    setDeleteCounts({
+      teams: teamIds.length,
+      submissions: submissionsRes.count || 0,
+      registrations: registrationsRes.count || 0,
+    })
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeletingHackathon(true)
+    try {
+      const res = await fetch(`/api/admin/hackathons/${deleteTarget.id}/delete`, { method: 'POST' })
+      const json = await res.json()
+      if (!json.success) {
+        alert('Error: ' + json.message)
+        return
+      }
+      alert('Hackathon deleted.')
+      setDeleteTarget(null)
+      setDeleteCounts(null)
+      loadDashboardData()
+    } catch {
+      alert('Network error — could not delete hackathon.')
+    } finally {
+      setDeletingHackathon(false)
     }
   }
 
@@ -605,6 +650,13 @@ export default function AdminDashboard() {
                         <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
                           {isCompleted && 'Archived'}
                         </span>
+                        <button
+                          onClick={() => handleOpenDeleteConfirm(h)}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 12px', fontSize: '13px', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                        >
+                          Delete
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -614,6 +666,32 @@ export default function AdminDashboard() {
           </tbody>
         </table>
       </div>
+
+      {deleteTarget && (
+        <div className="modal-overlay">
+          <div className="glass-card" style={{ width: '100%', maxWidth: '460px', padding: '32px' }}>
+            <h3 style={{ fontSize: '18px', marginBottom: '8px' }}>Delete "{deleteTarget.name}"?</h3>
+            {deleteCounts === null ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>Checking related data...</p>
+            ) : (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
+                This hackathon has <strong>{deleteCounts.registrations}</strong> registration{deleteCounts.registrations === 1 ? '' : 's'},{' '}
+                <strong>{deleteCounts.teams}</strong> team{deleteCounts.teams === 1 ? '' : 's'}, and{' '}
+                <strong>{deleteCounts.submissions}</strong> submission{deleteCounts.submissions === 1 ? '' : 's'}. This is a soft delete —
+                that data stays in the database for audit purposes, but this hackathon will disappear from every dashboard immediately.
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={() => { setDeleteTarget(null); setDeleteCounts(null) }} className="btn btn-secondary" style={{ padding: '8px 16px' }}>
+                Cancel
+              </button>
+              <button onClick={handleConfirmDelete} disabled={deletingHackathon || deleteCounts === null} className="btn btn-danger" style={{ padding: '8px 20px' }}>
+                {deletingHackathon ? 'Deleting...' : 'Delete Hackathon'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

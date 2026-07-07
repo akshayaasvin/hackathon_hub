@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { postJson } from '@/lib/apiFetch'
-import { Users, Search, Mail, Download, Trash2 } from 'lucide-react'
+import { Users, Search, Mail, Download, Trash2, KeyRound, Copy, CheckCircle2 } from 'lucide-react'
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<any[]>([])
@@ -19,6 +19,10 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<any>(null)
+  const [resettingId, setResettingId] = useState<string | null>(null)
+  const [newCredentials, setNewCredentials] = useState<{ email: string; password: string } | null>(null)
+  const [copied, setCopied] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -79,11 +83,7 @@ export default function AdminUsersPage() {
   }
 
   const handleDelete = async (u: any) => {
-    const confirmed = confirm(
-      `Delete ${u.full_name || u.email}? This permanently removes their account, profile, registrations, and submissions. This cannot be undone.`
-    )
-    if (!confirmed) return
-
+    setDeleteConfirmUser(null)
     setDeletingId(u.id)
     const result = await postJson('/api/admin/delete-user', { userId: u.id })
     if (!result.success) {
@@ -92,6 +92,29 @@ export default function AdminUsersPage() {
       setUsers((prev) => prev.filter((x) => x.id !== u.id))
     }
     setDeletingId(null)
+  }
+
+  const handleResetPassword = async (userId: string) => {
+    setResettingId(userId)
+    try {
+      const result = await postJson<{ email: string; password: string }>('/api/admin/reset-password', { userId })
+      if (!result.success) {
+        alert('Error: ' + result.message)
+        return
+      }
+      if (result.data) {
+        setNewCredentials({ email: result.data.email, password: result.data.password })
+      }
+    } finally {
+      setResettingId(null)
+    }
+  }
+
+  const copyCredentials = async () => {
+    if (!newCredentials) return
+    await navigator.clipboard.writeText(`Email: ${newCredentials.email}\nPassword: ${newCredentials.password}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   const filtered = useMemo(() => {
@@ -227,13 +250,14 @@ export default function AdminUsersPage() {
               <th>Institution/College</th>
               <th>Status</th>
               <th>Modify Role</th>
+              <th>Reset Password</th>
               <th>Delete</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No users found.</td>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No users found.</td>
               </tr>
             ) : (
               filtered.map((u) => {
@@ -278,7 +302,17 @@ export default function AdminUsersPage() {
                     </td>
                     <td>
                       <button
-                        onClick={() => handleDelete(u)}
+                        onClick={() => handleResetPassword(u.id)}
+                        disabled={resettingId === u.id}
+                        className="btn btn-secondary"
+                        style={{ padding: '6px 12px', fontSize: '13px' }}
+                      >
+                        <KeyRound size={14} /> {resettingId === u.id ? 'Resetting...' : 'Reset Password'}
+                      </button>
+                    </td>
+                    <td>
+                      <button
+                        onClick={() => setDeleteConfirmUser(u)}
                         disabled={deletingId === u.id}
                         className="btn btn-secondary"
                         style={{ padding: '6px 12px', fontSize: '13px', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.3)' }}
@@ -293,6 +327,48 @@ export default function AdminUsersPage() {
           </tbody>
         </table>
       </div>
+
+      {deleteConfirmUser && (
+        <div className="modal-overlay">
+          <div className="glass-card" style={{ width: '100%', maxWidth: '440px', padding: '32px' }}>
+            <h3 style={{ fontSize: '18px', marginBottom: '8px' }}>Delete {deleteConfirmUser.full_name || deleteConfirmUser.email}?</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
+              This permanently removes their account, profile, registrations, and submissions. This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={() => setDeleteConfirmUser(null)} className="btn btn-secondary" style={{ padding: '8px 16px' }}>
+                Cancel
+              </button>
+              <button onClick={() => handleDelete(deleteConfirmUser)} className="btn btn-danger" style={{ padding: '8px 20px' }}>
+                <Trash2 size={14} /> Delete Permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {newCredentials && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="glass-card" style={{ maxWidth: '460px', width: '100%', padding: '32px', borderLeft: '4px solid var(--success)' }}>
+            <h3 style={{ fontSize: '20px', marginBottom: '8px', color: 'var(--text-primary)' }}>Password reset</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '20px' }}>
+              Share this with the account owner. This is the only time it's shown — copy it now.
+            </p>
+            <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '16px', marginBottom: '20px', fontFamily: 'monospace', fontSize: '14px' }}>
+              <div style={{ marginBottom: '8px' }}><strong>Email:</strong> {newCredentials.email}</div>
+              <div><strong>Password:</strong> {newCredentials.password}</div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={copyCredentials} className="btn btn-secondary" style={{ padding: '10px 16px' }}>
+                {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? 'Copied' : 'Copy'}
+              </button>
+              <button onClick={() => setNewCredentials(null)} className="btn btn-success" style={{ padding: '10px 16px' }}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

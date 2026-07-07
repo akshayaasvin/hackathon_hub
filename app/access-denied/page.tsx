@@ -14,6 +14,7 @@ const dashboardByRole: Record<string, string> = {
 const areaMessage: Record<string, string> = {
   admin: "You're signed in, but this account doesn't have Administrator access.",
   jury: "You're signed in, but this account doesn't have Jury access.",
+  college: "You're signed in, but this account doesn't have Institution access.",
 }
 
 function AccessDeniedContent() {

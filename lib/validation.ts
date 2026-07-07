@@ -58,15 +58,13 @@ export const registerSchema = z.discriminatedUnion('role', [
 export type RegisterInput = z.infer<typeof registerSchema>
 
 // Used by the admin "manual create" flow (admin/colleges, admin/jury) — same
-// profile fields as self-serve registration, plus a password the admin sets directly.
-export const adminCreateCollegeSchema = collegeRegisterSchema.extend({
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-})
+// profile fields as self-serve registration. No password field: the server
+// generates one and returns it once so the admin can copy/share it, instead
+// of the admin choosing (and potentially reusing/weak-ing) a password.
+export const adminCreateCollegeSchema = collegeRegisterSchema
 export type AdminCreateCollegeInput = z.infer<typeof adminCreateCollegeSchema>
 
-export const adminCreateJurySchema = juryRegisterSchema.extend({
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-})
+export const adminCreateJurySchema = juryRegisterSchema
 export type AdminCreateJuryInput = z.infer<typeof adminCreateJurySchema>
 
 export const adminCreateSchema = z.discriminatedUnion('role', [

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Search, Eye, X, Trophy, Users, BookOpen, TrendingUp } from 'lucide-react'
+import { Plus, Search, Eye, X, Trophy, Users, BookOpen, TrendingUp, Copy, CheckCircle2 } from 'lucide-react'
 import { adminCreateCollegeSchema } from '@/lib/validation'
 import { postJson } from '@/lib/apiFetch'
 
@@ -25,6 +25,8 @@ export default function AdminCollegesPage() {
   const [selectedCollege, setSelectedCollege] = useState<any>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [newCredentials, setNewCredentials] = useState<{ email: string; password: string } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const emptyForm = {
     college_name: '',
@@ -35,7 +37,6 @@ export default function AdminCollegesPage() {
     contact_number: '',
     department: '',
     college_address: '',
-    password: '',
   }
   const [formData, setFormData] = useState(emptyForm)
 
@@ -53,7 +54,7 @@ export default function AdminCollegesPage() {
         supabase.from('participant_profiles').select('*'),
         supabase.from('team_members').select('*'),
         supabase.from('evaluations').select('*'),
-        supabase.from('hackathons').select('id, name').order('created_at', { ascending: false }),
+        supabase.from('hackathons').select('id, name').is('deleted_at', null).order('created_at', { ascending: false }),
         supabase.from('registrations').select('hackathon_id, user_id'),
         supabase.from('teams').select('id, hackathon_id'),
         supabase.from('submissions').select('id, team_id'),
@@ -108,17 +109,26 @@ export default function AdminCollegesPage() {
     setErrors({})
     setActionLoading(true)
     try {
-      const result = await postJson('/api/admin/create-account', parsed.data)
+      const result = await postJson<{ email: string; password: string }>('/api/admin/create-account', parsed.data)
       if (!result.success) {
         alert('Error: ' + result.message)
         return
       }
-      alert('College account created and activated.')
       setShowFormModal(false)
+      if (result.data) {
+        setNewCredentials({ email: result.data.email, password: result.data.password })
+      }
       await loadColleges()
     } finally {
       setActionLoading(false)
     }
+  }
+
+  const copyCredentials = async () => {
+    if (!newCredentials) return
+    await navigator.clipboard.writeText(`Email: ${newCredentials.email}\nPassword: ${newCredentials.password}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   const getStudentDetails = (student: any) => {
@@ -207,6 +217,29 @@ export default function AdminCollegesPage() {
 
   return (
     <div className="premium-container fade-in" style={{ padding: '40px' }}>
+      {newCredentials && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="glass-card" style={{ maxWidth: '460px', width: '100%', padding: '32px', borderLeft: '4px solid var(--success)' }}>
+            <h3 style={{ fontSize: '20px', marginBottom: '8px', color: 'var(--text-primary)' }}>College account created</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '20px' }}>
+              Share these credentials with the college. This is the only time the password is shown — copy it now.
+            </p>
+            <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '16px', marginBottom: '20px', fontFamily: 'monospace', fontSize: '14px' }}>
+              <div style={{ marginBottom: '8px' }}><strong>Email:</strong> {newCredentials.email}</div>
+              <div><strong>Password:</strong> {newCredentials.password}</div>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={copyCredentials} className="btn btn-secondary" style={{ padding: '10px 16px' }}>
+                {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />} {copied ? 'Copied' : 'Copy'}
+              </button>
+              <button onClick={() => setNewCredentials(null)} className="btn btn-success" style={{ padding: '10px 16px' }}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
         <div>
           <h1 style={{ fontSize: '32px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>College Management</h1>
@@ -398,16 +431,9 @@ export default function AdminCollegesPage() {
                 {errors.college_address && <div style={{ color: 'var(--danger)', fontSize: '12px', marginTop: '4px' }}>{errors.college_address}</div>}
               </div>
 
-              <div style={{ marginBottom: '24px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>Password</label>
-                <input
-                  type="password"
-                  className="premium-input"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                />
-                {errors.password && <div style={{ color: 'var(--danger)', fontSize: '12px', marginTop: '4px' }}>{errors.password}</div>}
-              </div>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                A secure password is generated automatically and shown once after creation, so you can copy and share it.
+              </p>
 
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                 <button type="button" onClick={() => setShowFormModal(false)} className="btn btn-secondary" style={{ padding: '8px 20px' }}>Cancel</button>

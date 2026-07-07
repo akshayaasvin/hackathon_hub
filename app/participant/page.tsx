@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Calendar, Users } from 'lucide-react'
+import { Calendar } from 'lucide-react'
 import { withTimeout } from '@/lib/utils'
 import { RegistrationStatusChip, type RegistrationStatusValue } from '@/components/participant/RegistrationStatusChip'
 
@@ -11,7 +11,6 @@ export default function ParticipantDashboard() {
   const [user, setUser] = useState<any>(null)
   const [hackathons, setHackathons] = useState<any[]>([])
   const [statusByHackathon, setStatusByHackathon] = useState<Map<string, RegistrationStatusValue>>(new Map())
-  const [myTeams, setMyTeams] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -59,7 +58,6 @@ export default function ParticipantDashboard() {
       setStatusByHackathon(statusMap)
 
       const teams = teamsRes.data || []
-      setMyTeams(teams)
 
       if (teams.length > 0) {
         const teamIds = teams.map((t: any) => t.id)
@@ -138,32 +136,6 @@ export default function ParticipantDashboard() {
         <h1 style={{ fontSize: '32px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>Participant Dashboard</h1>
         <p style={{ color: 'var(--text-secondary)' }}>Welcome back, <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{user?.email}</span>. Track your registrations, teams, and submissions.</p>
       </div>
-
-      {myTeams.length > 0 && (
-        <div style={{ marginBottom: '48px' }}>
-          <h2 style={{ fontSize: '20px', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Users size={20} color="var(--primary)" /> Managed Teams
-          </h2>
-          <div className="responsive-card-grid">
-            {myTeams.map((team) => (
-              <div key={team.id} className="glass-card" style={{ borderLeft: '4px solid var(--primary)', padding: '24px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>TEAM MANAGER</span>
-                <h3 style={{ fontSize: '20px', margin: '6px 0 12px 0', color: 'var(--text-primary)' }}>{team.team_name}</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
-                  <strong>Hackathon:</strong> {team.hackathons?.name}
-                </p>
-                <button
-                  onClick={() => router.push(`/participant/${team.hackathon_id}`)}
-                  className="btn btn-primary"
-                  style={{ padding: '8px 16px', fontSize: '13px', width: '100%' }}
-                >
-                  Open Hackathon
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       <h2 style={{ fontSize: '20px', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
         <Calendar size={20} color="var(--secondary)" /> Open Hackathons

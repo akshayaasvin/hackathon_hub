@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Send, Volume2, Users, Bell } from 'lucide-react'
+import { Send, Volume2, Users, Trash2 } from 'lucide-react'
 
 export default function AdminAnnouncements() {
   const [user, setUser] = useState<any>(null)
@@ -12,6 +12,8 @@ export default function AdminAnnouncements() {
   const [targetRole, setTargetRole] = useState('all')
   const [sending, setSending] = useState(false)
   const [announcements, setAnnouncements] = useState<any[]>([])
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -99,6 +101,29 @@ export default function AdminAnnouncements() {
     setSending(false)
   }
 
+  const handleDelete = async (id: string) => {
+    setDeletingId(id)
+    const previous = announcements
+    setAnnouncements((prev) => prev.filter((a) => a.id !== id))
+    setConfirmDeleteId(null)
+
+    try {
+      const res = await fetch(`/api/announcements/${id}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!json.success) {
+        alert('Error: ' + json.message)
+        setAnnouncements(previous)
+      } else {
+        alert('Announcement deleted.')
+      }
+    } catch {
+      alert('Network error — could not delete announcement.')
+      setAnnouncements(previous)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   return (
     <div className="premium-container fade-in" style={{ maxWidth: '800px' }}>
       <div style={{ marginBottom: '36px' }}>
@@ -167,27 +192,57 @@ export default function AdminAnnouncements() {
         ) : (
           announcements.map(ann => (
             <div key={ann.id} className="glass-card" style={{ padding: '20px', borderLeft: '3px solid var(--primary)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', gap: '12px' }}>
                 <strong style={{ fontSize: '16px', color: 'var(--text-primary)' }}>{ann.title}</strong>
-                <span style={{
-                  fontSize: '11px',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                  background: 'rgba(2, 132, 199, 0.05)',
-                  color: 'var(--text-secondary)',
-                  fontWeight: 600
-                }}>
-                  {ann.target_role.toUpperCase()}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  <span style={{
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    background: 'rgba(2, 132, 199, 0.05)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 600
+                  }}>
+                    {ann.target_role.toUpperCase()}
+                  </span>
+                  <button
+                    onClick={() => setConfirmDeleteId(ann.id)}
+                    disabled={deletingId === ann.id}
+                    className="btn btn-secondary"
+                    style={{ padding: '4px 8px', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                    aria-label="Delete announcement"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
               <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5', marginBottom: '12px' }}>{ann.message}</p>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <Users size={12} /> Sent by {ann.created_by.slice(0, 8)} | {new Date(ann.created_at).toLocaleString()}
+                <Users size={12} /> Sent by {ann.created_by ? ann.created_by.slice(0, 8) : 'a deleted admin'} | {new Date(ann.created_at).toLocaleString()}
               </div>
             </div>
           ))
         )}
       </div>
+
+      {confirmDeleteId && (
+        <div className="modal-overlay">
+          <div className="glass-card" style={{ width: '100%', maxWidth: '420px', padding: '32px' }}>
+            <h3 style={{ fontSize: '18px', marginBottom: '8px' }}>Delete this announcement?</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
+              This cannot be undone. It will disappear from every user's notifications feed reference.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={() => setConfirmDeleteId(null)} className="btn btn-secondary" style={{ padding: '8px 16px' }}>
+                Cancel
+              </button>
+              <button onClick={() => handleDelete(confirmDeleteId)} className="btn btn-danger" style={{ padding: '8px 20px' }}>
+                <Trash2 size={14} /> Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
