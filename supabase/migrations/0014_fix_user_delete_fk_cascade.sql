@@ -37,10 +37,14 @@
 --     registrations.reviewed_by
 --
 -- The first version of this migration hardcoded the assumed constraint names
--- (<table>_<column>_fkey) and failed with "constraint ... does not exist" —
--- at least one of them wasn't actually named that way in this database. This
--- version looks up each FK's real name from pg_constraint instead of
--- assuming it, so it can't fail on a naming mismatch again.
+-- (<table>_<column>_fkey) and failed with "constraint ... does not exist".
+-- The second version looked up the real constraint name from pg_constraint
+-- instead — and then hit "column approved_by ... does not exist" on
+-- college_profiles: the live database has drifted from 0001_init.sql at some
+-- point (that column was apparently never actually added, despite being in
+-- the file). So this version checks whether each column exists at all
+-- first; if it doesn't, it adds it (nullable, with the FK already set to
+-- ON DELETE SET NULL) instead of assuming it's already there.
 --
 -- This is the database-level counterpart to the same 10-column clear-then-
 -- delete logic already in app/api/admin/delete-user/route.ts — that app-level
@@ -64,11 +68,26 @@ declare
   tgt text[];
   t text;
   c text;
+  column_exists boolean;
   existing_constraint text;
 begin
   foreach tgt slice 1 in array targets loop
     t := tgt[1];
     c := tgt[2];
+
+    select exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = t and column_name = c
+    ) into column_exists;
+
+    if not column_exists then
+      execute format(
+        'alter table public.%I add column %I uuid references public.users(id) on delete set null',
+        t, c
+      );
+      raise notice 'Added missing column with FK: %.%', t, c;
+      continue;
+    end if;
 
     -- Find whatever this column's actual FK-into-users(id) constraint is
     -- currently named, regardless of naming convention.
