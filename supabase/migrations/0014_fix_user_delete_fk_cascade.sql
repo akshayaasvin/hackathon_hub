@@ -36,57 +36,65 @@
 --     jury_applications.created_user_id
 --     registrations.reviewed_by
 --
+-- The first version of this migration hardcoded the assumed constraint names
+-- (<table>_<column>_fkey) and failed with "constraint ... does not exist" —
+-- at least one of them wasn't actually named that way in this database. This
+-- version looks up each FK's real name from pg_constraint instead of
+-- assuming it, so it can't fail on a naming mismatch again.
+--
 -- This is the database-level counterpart to the same 10-column clear-then-
 -- delete logic already in app/api/admin/delete-user/route.ts — that app-level
 -- step becomes redundant after this migration (Postgres now does it
 -- automatically) but is left in place as harmless defense in depth.
 
-alter table public.college_profiles
-  drop constraint college_profiles_approved_by_fkey,
-  add constraint college_profiles_approved_by_fkey
-    foreign key (approved_by) references public.users(id) on delete set null;
+do $$
+declare
+  targets text[][] := array[
+    array['college_profiles', 'approved_by'],
+    array['jury_profiles', 'approved_by'],
+    array['hackathons', 'created_by'],
+    array['teams', 'team_lead_id'],
+    array['announcements', 'created_by'],
+    array['college_applications', 'reviewed_by'],
+    array['college_applications', 'created_user_id'],
+    array['jury_applications', 'reviewed_by'],
+    array['jury_applications', 'created_user_id'],
+    array['registrations', 'reviewed_by']
+  ];
+  tgt text[];
+  t text;
+  c text;
+  existing_constraint text;
+begin
+  foreach tgt slice 1 in array targets loop
+    t := tgt[1];
+    c := tgt[2];
 
-alter table public.jury_profiles
-  drop constraint jury_profiles_approved_by_fkey,
-  add constraint jury_profiles_approved_by_fkey
-    foreign key (approved_by) references public.users(id) on delete set null;
+    -- Find whatever this column's actual FK-into-users(id) constraint is
+    -- currently named, regardless of naming convention.
+    select con.conname into existing_constraint
+    from pg_constraint con
+    join pg_class rel on rel.oid = con.conrelid
+    join pg_namespace nsp on nsp.oid = rel.relnamespace
+    join pg_attribute att
+      on att.attrelid = rel.oid
+      and att.attnum = con.conkey[1]
+    where nsp.nspname = 'public'
+      and rel.relname = t
+      and att.attname = c
+      and con.contype = 'f'
+      and array_length(con.conkey, 1) = 1
+    limit 1;
 
-alter table public.hackathons
-  drop constraint hackathons_created_by_fkey,
-  add constraint hackathons_created_by_fkey
-    foreign key (created_by) references public.users(id) on delete set null;
+    if existing_constraint is not null then
+      execute format('alter table public.%I drop constraint %I', t, existing_constraint);
+    end if;
 
-alter table public.teams
-  drop constraint teams_team_lead_id_fkey,
-  add constraint teams_team_lead_id_fkey
-    foreign key (team_lead_id) references public.users(id) on delete set null;
+    execute format(
+      'alter table public.%I add constraint %I foreign key (%I) references public.users(id) on delete set null',
+      t, t || '_' || c || '_fkey', c
+    );
 
-alter table public.announcements
-  drop constraint announcements_created_by_fkey,
-  add constraint announcements_created_by_fkey
-    foreign key (created_by) references public.users(id) on delete set null;
-
-alter table public.college_applications
-  drop constraint college_applications_reviewed_by_fkey,
-  add constraint college_applications_reviewed_by_fkey
-    foreign key (reviewed_by) references public.users(id) on delete set null;
-
-alter table public.college_applications
-  drop constraint college_applications_created_user_id_fkey,
-  add constraint college_applications_created_user_id_fkey
-    foreign key (created_user_id) references public.users(id) on delete set null;
-
-alter table public.jury_applications
-  drop constraint jury_applications_reviewed_by_fkey,
-  add constraint jury_applications_reviewed_by_fkey
-    foreign key (reviewed_by) references public.users(id) on delete set null;
-
-alter table public.jury_applications
-  drop constraint jury_applications_created_user_id_fkey,
-  add constraint jury_applications_created_user_id_fkey
-    foreign key (created_user_id) references public.users(id) on delete set null;
-
-alter table public.registrations
-  drop constraint registrations_reviewed_by_fkey,
-  add constraint registrations_reviewed_by_fkey
-    foreign key (reviewed_by) references public.users(id) on delete set null;
+    raise notice 'Fixed FK: %.% (was %)', t, c, coalesce(existing_constraint, '<none found>');
+  end loop;
+end $$;
