@@ -6,12 +6,38 @@ import { useRouter } from 'next/navigation'
 import { Plus, Play, Calendar, Users, Layers, CheckSquare, FileSpreadsheet, Send, School, Gavel, Trophy, Megaphone } from 'lucide-react'
 import { withTimeout } from '@/lib/utils'
 
+const emptyHackathonForm = {
+  name: '',
+  description: '',
+  theme: '',
+  rules: '',
+  eligibility: '',
+  prize_details: '',
+  start_date: '',
+  end_date: '',
+  registration_deadline: '',
+  max_team_size: 5,
+  registration_fee: ''
+}
+
+// Converts a stored ISO timestamp back into the local "YYYY-MM-DDTHH:mm"
+// shape a <input type="datetime-local"> needs, so editing a hackathon
+// pre-fills the same local time it was originally saved as (start_date/
+// end_date/registration_deadline are all saved via `new Date(...).toISOString()`
+// from that same local input, so this is the exact inverse).
+function toDatetimeLocalValue(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export default function AdminDashboard() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [dataLoading, setDataLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  
+
   // Dashboard Stats
   const [stats, setStats] = useState({
     totalHackathons: 0,
@@ -19,24 +45,14 @@ export default function AdminDashboard() {
     pendingRegistrations: 0,
     totalTeams: 0
   })
-  
+
   const [hackathons, setHackathons] = useState<any[]>([])
-  
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    theme: '',
-    rules: '',
-    eligibility: '',
-    prize_details: '',
-    start_date: '',
-    end_date: '',
-    registration_deadline: '',
-    max_team_size: 5,
-    registration_fee: ''
-  })
+
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [formData, setFormData] = useState(emptyHackathonForm)
   const [bannerFile, setBannerFile] = useState<File | null>(null)
   const [bannerPreview, setBannerPreview] = useState<string | null>(null)
+  const [existingBannerUrl, setExistingBannerUrl] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [deleteCounts, setDeleteCounts] = useState<{ teams: number; submissions: number; registrations: number } | null>(null)
   const [deletingHackathon, setDeletingHackathon] = useState(false)
@@ -113,6 +129,46 @@ export default function AdminDashboard() {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
+  const resetForm = () => {
+    setShowForm(false)
+    setEditingId(null)
+    setFormData(emptyHackathonForm)
+    setBannerFile(null)
+    setBannerPreview(null)
+    setExistingBannerUrl(null)
+  }
+
+  const handleOpenCreate = () => {
+    setEditingId(null)
+    setFormData(emptyHackathonForm)
+    setBannerFile(null)
+    setBannerPreview(null)
+    setExistingBannerUrl(null)
+    setShowForm(true)
+  }
+
+  const handleOpenEdit = (h: any) => {
+    setEditingId(h.id)
+    setFormData({
+      name: h.name || '',
+      description: h.description || '',
+      theme: h.theme || '',
+      rules: h.rules || '',
+      eligibility: h.eligibility || '',
+      prize_details: h.prize_details || '',
+      start_date: toDatetimeLocalValue(h.start_date),
+      end_date: toDatetimeLocalValue(h.end_date),
+      registration_deadline: toDatetimeLocalValue(h.registration_deadline),
+      max_team_size: h.max_team_size ?? 5,
+      registration_fee: h.registration_fee != null ? String(h.registration_fee) : '',
+    })
+    setBannerFile(null)
+    setBannerPreview(h.banner_url || null)
+    setExistingBannerUrl(h.banner_url || null)
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -121,7 +177,7 @@ export default function AdminDashboard() {
     const endDate = formData.end_date ? new Date(formData.end_date).toISOString() : null
     const regDeadline = formData.registration_deadline ? new Date(formData.registration_deadline).toISOString() : null
 
-    let bannerUrl: string | null = null
+    let bannerUrl: string | null = existingBannerUrl
     if (bannerFile) {
       const ext = bannerFile.name.split('.').pop()
       const path = `${crypto.randomUUID()}.${ext}`
@@ -137,7 +193,7 @@ export default function AdminDashboard() {
       bannerUrl = supabase.storage.from('hackathon-banners').getPublicUrl(path).data.publicUrl
     }
 
-    const { error } = await supabase.from('hackathons').insert({
+    const payload = {
       name: formData.name,
       description: formData.description,
       theme: formData.theme,
@@ -150,30 +206,17 @@ export default function AdminDashboard() {
       max_team_size: Number(formData.max_team_size),
       banner_url: bannerUrl,
       registration_fee: formData.registration_fee ? Number(formData.registration_fee) : null,
-      status: 'draft',
-      created_by: currentUserId,
-    })
+    }
+
+    const { error } = editingId
+      ? await supabase.from('hackathons').update(payload).eq('id', editingId)
+      : await supabase.from('hackathons').insert({ ...payload, status: 'draft', created_by: currentUserId })
 
     if (error) {
       alert('Error: ' + error.message)
     } else {
-      alert('Hackathon created successfully!')
-      setShowForm(false)
-      setFormData({
-        name: '',
-        description: '',
-        theme: '',
-        rules: '',
-        eligibility: '',
-        prize_details: '',
-        start_date: '',
-        end_date: '',
-        registration_deadline: '',
-        max_team_size: 5,
-        registration_fee: ''
-      })
-      setBannerFile(null)
-      setBannerPreview(null)
+      alert(editingId ? 'Hackathon updated successfully!' : 'Hackathon created successfully!')
+      resetForm()
       loadDashboardData()
     }
     setLoading(false)
@@ -182,7 +225,7 @@ export default function AdminDashboard() {
   const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null
     setBannerFile(file)
-    setBannerPreview(file ? URL.createObjectURL(file) : null)
+    setBannerPreview(file ? URL.createObjectURL(file) : existingBannerUrl)
   }
 
   const updateHackathonStatus = async (id: string, newStatus: string) => {
@@ -267,10 +310,10 @@ export default function AdminDashboard() {
           <p style={{ color: 'var(--text-secondary)' }}>Monitor metrics, manage registrations and configure hackathon parameters.</p>
         </div>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => (showForm ? resetForm() : handleOpenCreate())}
           className="btn btn-primary"
         >
-          {showForm ? 'Cancel Creation' : <><Plus size={18} /> Create Hackathon</>}
+          {showForm ? 'Cancel' : <><Plus size={18} /> Create Hackathon</>}
         </button>
       </div>
 
@@ -317,7 +360,7 @@ export default function AdminDashboard() {
       {/* Quick Action Cards */}
       <h2 style={{ fontSize: '20px', marginBottom: '20px', fontFamily: 'var(--font-display)' }}>Quick Actions</h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '40px' }}>
-        <button onClick={() => setShowForm(!showForm)} className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', textAlign: 'left', cursor: 'pointer', border: '1px solid rgba(2, 132, 199, 0.15)', background: 'rgba(2, 132, 199, 0.02)', padding: '20px', width: '100%', fontFamily: 'inherit' }}>
+        <button onClick={() => (showForm ? resetForm() : handleOpenCreate())} className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', textAlign: 'left', cursor: 'pointer', border: '1px solid rgba(2, 132, 199, 0.15)', background: 'rgba(2, 132, 199, 0.02)', padding: '20px', width: '100%', fontFamily: 'inherit' }}>
           <div style={{ background: 'rgba(2, 132, 199, 0.1)', padding: '10px', borderRadius: '10px', color: 'var(--primary)' }}>
             <Plus size={20} />
           </div>
@@ -400,7 +443,7 @@ export default function AdminDashboard() {
 
       {showForm && (
         <div className="glass-card fade-in" style={{ marginBottom: '40px', borderLeft: '4px solid var(--primary)' }}>
-          <h2 style={{ marginBottom: '24px', fontSize: '22px' }}>Configure New Hackathon</h2>
+          <h2 style={{ marginBottom: '24px', fontSize: '22px' }}>{editingId ? 'Edit Hackathon' : 'Configure New Hackathon'}</h2>
           <form onSubmit={handleSubmit}>
             <div className="responsive-grid-2" style={{ marginBottom: '20px' }}>
               <div>
@@ -555,16 +598,16 @@ export default function AdminDashboard() {
             </div>
 
             <div style={{ display: 'flex', gap: '12px' }}>
-              <button 
-                type="submit" 
-                disabled={loading} 
+              <button
+                type="submit"
+                disabled={loading}
                 className="btn btn-primary"
               >
-                {loading ? 'Publishing...' : 'Deploy Hackathon'}
+                {loading ? (editingId ? 'Saving...' : 'Publishing...') : (editingId ? 'Save Changes' : 'Deploy Hackathon')}
               </button>
-              <button 
-                type="button" 
-                onClick={() => setShowForm(false)} 
+              <button
+                type="button"
+                onClick={resetForm}
                 className="btn btn-secondary"
               >
                 Discard
@@ -653,6 +696,13 @@ export default function AdminDashboard() {
                         <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
                           {isCompleted && 'Archived'}
                         </span>
+                        <button
+                          onClick={() => handleOpenEdit(h)}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 12px', fontSize: '13px' }}
+                        >
+                          Edit
+                        </button>
                         <button
                           onClick={() => handleOpenDeleteConfirm(h)}
                           className="btn btn-secondary"
