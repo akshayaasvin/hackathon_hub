@@ -1,14 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FormField } from './FormField'
 import { participantRegisterSchema } from '@/lib/validation'
 import { postJson } from '@/lib/apiFetch'
+import { createClient } from '@/lib/supabase/client'
 
 const gridStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
   columnGap: '16px',
+}
+
+const OTHER_COLLEGE = '__other__'
+
+function todayISODate(): string {
+  return new Date().toISOString().slice(0, 10)
 }
 
 export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: string) => void }) {
@@ -28,9 +35,31 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [serverError, setServerError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [colleges, setColleges] = useState<{ id: string; name: string }[]>([])
+  const [collegeChoice, setCollegeChoice] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    createClient()
+      .from('colleges')
+      .select('id, name')
+      .order('name', { ascending: true })
+      .then(({ data }) => {
+        if (!cancelled) setColleges(data || [])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }))
+
+  const handleCollegeChoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value
+    setCollegeChoice(value)
+    setForm((f) => ({ ...f, college_name: value === OTHER_COLLEGE ? '' : value }))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -99,7 +128,32 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
 
       <div style={gridStyle}>
         <FormField label="College Name" error={errors.college_name}>
-          <input className="premium-input" value={form.college_name} onChange={set('college_name')} required />
+          <select
+            className="premium-input premium-select"
+            value={collegeChoice}
+            onChange={handleCollegeChoiceChange}
+            required
+          >
+            <option value="" disabled>
+              Select your college
+            </option>
+            {colleges.map((c) => (
+              <option key={c.id} value={c.name}>
+                {c.name}
+              </option>
+            ))}
+            <option value={OTHER_COLLEGE}>Other (not listed)</option>
+          </select>
+          {collegeChoice === OTHER_COLLEGE && (
+            <input
+              className="premium-input"
+              style={{ marginTop: '8px' }}
+              placeholder="Enter your college name"
+              value={form.college_name}
+              onChange={set('college_name')}
+              required
+            />
+          )}
         </FormField>
         <FormField label="Passout Year" error={errors.passout_year}>
           <input
@@ -135,6 +189,7 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
             className="premium-input"
             value={form.date_of_birth}
             onChange={set('date_of_birth')}
+            max={todayISODate()}
             required
           />
         </FormField>

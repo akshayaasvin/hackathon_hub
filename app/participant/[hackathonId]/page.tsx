@@ -7,7 +7,7 @@ import { postJson } from '@/lib/apiFetch'
 import { ArrowLeft, Calendar, Users, Trophy, ShieldCheck } from 'lucide-react'
 import { HackathonStepper } from '@/components/participant/HackathonStepper'
 import { RegistrationStatusChip, type RegistrationStatusValue } from '@/components/participant/RegistrationStatusChip'
-import { RazorpayButton } from '@/components/RazorpayButton'
+import { openRazorpayCheckout, type RazorpayOrder } from '@/components/RazorpayCheckout'
 import { SubmissionModal, type SubmissionFormValues } from '@/components/participant/SubmissionModal'
 
 export default function HackathonDetailPage() {
@@ -32,6 +32,7 @@ export default function HackathonDetailPage() {
   const [showSubmissionModal, setShowSubmissionModal] = useState(false)
   const [showPayPanel, setShowPayPanel] = useState(false)
   const [paymentReference, setPaymentReference] = useState('')
+  const [verifying, setVerifying] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -106,16 +107,47 @@ export default function HackathonDetailPage() {
     setActionLoading(false)
   }
 
+  const pollForPaymentOutcome = async (registrationId: string) => {
+    setVerifying(true)
+    const timeoutMs = 30000
+    const intervalMs = 2500
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs))
+      const { data } = await supabase.from('registrations').select('status').eq('id', registrationId).single()
+      if (data && data.status !== 'payment_pending') break
+    }
+    setVerifying(false)
+    await loadData()
+  }
+
   const handlePayNow = async () => {
     setActionLoading(true)
-    const result = await postJson(`/api/registrations/${registration.id}/pay`, {})
-    if (!result.success) {
-      alert('Error: ' + result.message)
-    } else {
+    try {
+      const result = await postJson<{ order_id: string; amount: number; currency: string; key_id: string }>(
+        `/api/registrations/${registration.id}/create-order`,
+        {}
+      )
+      if (!result.success || !result.data) {
+        alert('Error: ' + result.message)
+        return
+      }
       setShowPayPanel(true)
+      const registrationId = registration.id
       await loadData()
+      await openRazorpayCheckout(result.data, {
+        email: user?.email,
+        onSuccess: () => {
+          pollForPaymentOutcome(registrationId)
+        },
+        onDismiss: () => {},
+        onFailure: () => {
+          alert('Payment failed. You can retry below.')
+        },
+      })
+    } finally {
+      setActionLoading(false)
     }
-    setActionLoading(false)
   }
 
   const handleConfirmPayment = async () => {
@@ -275,8 +307,8 @@ export default function HackathonDetailPage() {
         )}
 
         {status === 'registered' && !showPayPanel && (
-          <button onClick={handlePayNow} disabled={actionLoading} className="btn btn-primary" style={{ padding: '12px 28px' }}>
-            {actionLoading ? 'Starting...' : 'Pay Now'}
+          <button onClick={handlePayNow} disabled={actionLoading || !hackathon.registration_fee} className="btn btn-primary" style={{ padding: '12px 28px' }}>
+            {actionLoading ? 'Starting...' : hackathon.registration_fee ? `Pay Now (₹${hackathon.registration_fee})` : 'Registration fee not set'}
           </button>
         )}
 
@@ -288,17 +320,24 @@ export default function HackathonDetailPage() {
 
         {(status === 'payment_pending' || showPayPanel) && (
           <div>
-            {hackathon.razorpay_button_id ? (
-              <div style={{ marginBottom: '16px' }}>
-                <RazorpayButton buttonId={hackathon.razorpay_button_id} />
-              </div>
-            ) : (
-              <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>
-                No payment button configured yet — contact the organizers.
+            {verifying ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '16px' }}>
+                Verifying your payment… this usually takes a few seconds.
               </p>
+            ) : (
+              <button
+                onClick={handlePayNow}
+                disabled={actionLoading}
+                className="btn btn-primary"
+                style={{ padding: '12px 28px', marginBottom: '16px' }}
+              >
+                {actionLoading
+                  ? 'Opening...'
+                  : `Pay${hackathon.registration_fee ? ` ₹${hackathon.registration_fee}` : ''} with Razorpay`}
+              </button>
             )}
             <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-              After paying, paste your payment reference here to notify the admin:
+              Already paid but not reflected yet? Paste your payment reference here to notify the admin:
             </label>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <input

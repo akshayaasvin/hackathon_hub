@@ -112,7 +112,7 @@ export interface Hackathon {
   end_date: string
   prize_details: string | null
   max_team_size: number
-  razorpay_button_id: string | null
+  registration_fee: number | null
   status: 'draft' | 'published' | 'ongoing' | 'completed'
   created_by: string | null
   created_at: string
@@ -136,13 +136,90 @@ export interface TeamMember {
   joined_at: string
 }
 
+export type RegistrationPaymentStatus =
+  | 'registered'
+  | 'payment_pending'
+  | 'payment_submitted'
+  | 'approved'
+  | 'rejected'
+  | 'team_created'
+  | 'submitted'
+
 export interface Registration {
   id: string
   hackathon_id: string
   user_id: string
   team_id: string | null
   registration_status: 'pending' | 'confirmed' | 'cancelled'
+  status: RegistrationPaymentStatus
+  payment_amount: number | null
+  payment_reference: string | null
+  payment_method: 'razorpay' | 'offline_import' | null
+  reviewed_by: string | null
+  reviewed_at: string | null
   registered_at: string
+}
+
+export interface PaymentOrder {
+  id: string
+  registration_id: string
+  razorpay_order_id: string
+  razorpay_payment_id: string | null
+  amount: number
+  currency: string
+  status: 'created' | 'paid' | 'failed'
+  created_at: string
+  updated_at: string
+}
+
+export interface College {
+  id: string
+  name: string
+  district: string | null
+  commission_percent: number
+  settlement_status: 'pending' | 'settled'
+  settled_at: string | null
+  settled_by: string | null
+  last_settled_amount: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CollegeSettlement {
+  id: string
+  college_id: string
+  amount: number
+  settled_by: string | null
+  settled_at: string
+  notes: string | null
+}
+
+export interface CollegePaymentImport {
+  id: string
+  college_id: string
+  hackathon_id: string
+  file_name: string
+  uploaded_by: string | null
+  uploaded_at: string
+  status: 'previewing' | 'committed' | 'cancelled'
+  committed_at: string | null
+  committed_by: string | null
+  total_rows: number
+  matched_count: number
+  unmatched_count: number
+}
+
+export interface CollegePaymentImportRow {
+  id: string
+  import_id: string
+  email: string
+  student_name: string | null
+  department: string | null
+  payment_reference: string | null
+  amount: number | null
+  match_status: 'matched' | 'unmatched'
+  registration_id: string | null
+  created_at: string
 }
 
 export interface Submission {

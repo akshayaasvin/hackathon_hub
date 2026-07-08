@@ -2,23 +2,29 @@ import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
 
-// Razorpay webhook: payment_pending -> payment_submitted, automatically.
+// Razorpay webhook, source of truth for the real Orders API + Checkout.js
+// flow (app/api/registrations/[id]/create-order):
 //
-// Requires two things configured in your Razorpay dashboard for this to ever
-// fire (neither of which can be set up from here — they're on your Razorpay
+//   payment.captured (signature verified) -> registrations.status = 'approved'
+//     directly — a verified webhook is stronger proof of payment than the
+//     old manual "paste your reference" self-report ever was, so this skips
+//     the payment_submitted manual-review step entirely.
+//   payment.failed -> registrations.status = 'rejected', same "Retry" UI
+//     path the student already sees for an admin-rejected payment.
+//   order.paid -> not applicable to the Orders API + Checkout.js flow (only
+//     fires for Payment Links, which this app no longer uses); ignored.
+//
+// Requires two things configured in your Razorpay dashboard for this to
+// ever fire (neither can be set up from here — they're on your Razorpay
 // account):
 //   1. A webhook pointing at https://<your-domain>/api/webhooks/razorpay,
-//      subscribed to at least the "payment_link.paid" event.
+//      subscribed to "payment.captured" and "payment.failed".
 //   2. RAZORPAY_WEBHOOK_SECRET env var set to the signing secret Razorpay
 //      shows you when you create that webhook.
-// It also requires the registration id to travel with the payment so this
-// route can find the row again — configure the Razorpay Payment Button's
-// "Reference ID" field (or a custom `notes.registration_id`) to be set to
-// the registration's id when the participant lands on the button.
 //
-// Until both are wired up, use the "Mark Payment Complete" self-report flow
-// (app/api/registrations/[id]/confirm-payment) — that's the fully working,
-// testable path today.
+// Until that's wired up, use the "Mark Payment Complete" self-report flow
+// (app/api/registrations/[id]/confirm-payment) as a fallback — an admin can
+// still manually verify and approve from app/admin/registrations.
 export async function POST(request: Request) {
   try {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET
@@ -46,42 +52,73 @@ export async function POST(request: Request) {
     const paymentEntity = payload?.payload?.payment?.entity
     const registrationId: string | undefined =
       paymentEntity?.notes?.registration_id || payload?.payload?.payment_link?.entity?.reference_id
+    const orderId: string | undefined = paymentEntity?.order_id
 
     if (!registrationId) {
       console.warn('[razorpay webhook] no registration_id in payload, event:', event)
       return apiSuccess({ ignored: true }, 'No registration reference in payload.')
     }
 
-    const isPaidEvent = event === 'payment_link.paid' || event === 'payment.captured'
-    if (!isPaidEvent) {
-      return apiSuccess({ ignored: true }, `Ignoring event "${event}".`)
-    }
-
     const admin = createAdminClient()
-    const { data: registration } = await admin
-      .from('registrations')
-      .select('id, status')
-      .eq('id', registrationId)
-      .single()
 
-    if (!registration) {
-      console.warn('[razorpay webhook] registration not found:', registrationId)
-      return apiSuccess({ ignored: true }, 'Registration not found.')
+    if (event === 'payment.captured' || event === 'payment_link.paid') {
+      const { data: registration } = await admin
+        .from('registrations')
+        .select('id, status')
+        .eq('id', registrationId)
+        .single()
+
+      if (!registration) {
+        console.warn('[razorpay webhook] registration not found:', registrationId)
+        return apiSuccess({ ignored: true }, 'Registration not found.')
+      }
+      if (registration.status !== 'payment_pending') {
+        return apiSuccess({ ignored: true }, `Registration already "${registration.status}".`)
+      }
+
+      await admin
+        .from('registrations')
+        .update({
+          status: 'approved',
+          payment_method: 'razorpay',
+          payment_amount: paymentEntity?.amount ? paymentEntity.amount / 100 : null,
+          payment_reference: paymentEntity?.id || null,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', registrationId)
+
+      if (orderId) {
+        await admin
+          .from('payment_orders')
+          .update({
+            status: 'paid',
+            razorpay_payment_id: paymentEntity?.id || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('razorpay_order_id', orderId)
+      }
+
+      return apiSuccess({ status: 'approved' }, 'Payment verified — registration approved.')
     }
-    if (registration.status !== 'payment_pending') {
-      return apiSuccess({ ignored: true }, `Registration already "${registration.status}".`)
+
+    if (event === 'payment.failed') {
+      await admin
+        .from('registrations')
+        .update({ status: 'rejected' })
+        .eq('id', registrationId)
+        .eq('status', 'payment_pending')
+
+      if (orderId) {
+        await admin
+          .from('payment_orders')
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .eq('razorpay_order_id', orderId)
+      }
+
+      return apiSuccess({ status: 'rejected' }, 'Payment failed — registration marked rejected.')
     }
 
-    await admin
-      .from('registrations')
-      .update({
-        status: 'payment_submitted',
-        payment_amount: paymentEntity?.amount ? paymentEntity.amount / 100 : null,
-        payment_reference: paymentEntity?.id || null,
-      })
-      .eq('id', registrationId)
-
-    return apiSuccess({ status: 'payment_submitted' }, 'Payment recorded.')
+    return apiSuccess({ ignored: true }, `Ignoring event "${event}".`)
   } catch (err: any) {
     console.error('[razorpay webhook] unhandled error:', err)
     return apiError('Webhook processing failed.', 500)

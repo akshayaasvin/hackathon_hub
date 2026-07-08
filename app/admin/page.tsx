@@ -33,7 +33,7 @@ export default function AdminDashboard() {
     end_date: '',
     registration_deadline: '',
     max_team_size: 5,
-    razorpay_button_id: ''
+    registration_fee: ''
   })
   const [bannerFile, setBannerFile] = useState<File | null>(null)
   const [bannerPreview, setBannerPreview] = useState<string | null>(null)
@@ -149,7 +149,7 @@ export default function AdminDashboard() {
       registration_deadline: regDeadline,
       max_team_size: Number(formData.max_team_size),
       banner_url: bannerUrl,
-      razorpay_button_id: formData.razorpay_button_id || null,
+      registration_fee: formData.registration_fee ? Number(formData.registration_fee) : null,
       status: 'draft',
       created_by: currentUserId,
     })
@@ -170,7 +170,7 @@ export default function AdminDashboard() {
         end_date: '',
         registration_deadline: '',
         max_team_size: 5,
-        razorpay_button_id: ''
+        registration_fee: ''
       })
       setBannerFile(null)
       setBannerPreview(null)
@@ -523,13 +523,16 @@ export default function AdminDashboard() {
                 />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Razorpay Button ID</label>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Registration Fee (₹)</label>
                 <input
-                  name="razorpay_button_id"
-                  value={formData.razorpay_button_id}
+                  type="number"
+                  min="0"
+                  step="1"
+                  name="registration_fee"
+                  value={formData.registration_fee}
                   onChange={handleChange}
                   className="premium-input"
-                  placeholder="e.g. pl_ABC123xyz (from Razorpay dashboard)"
+                  placeholder="e.g. 599"
                 />
               </div>
             </div>

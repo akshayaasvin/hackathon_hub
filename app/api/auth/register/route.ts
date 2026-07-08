@@ -85,9 +85,11 @@ export async function POST(request: Request) {
     // immediately (email confirmation drives the auto-activation trigger). ──
     if (input.role === 'participant') {
       const supabase = await createClient()
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: input.email,
         password: input.password,
+        options: { emailRedirectTo: `${siteUrl}/login?confirmed=1` },
       })
 
       if (signUpError || !signUpData.user) {
@@ -103,14 +105,16 @@ export async function POST(request: Request) {
 
       // Upsert, not insert: a database trigger may have already created a
       // placeholder row (role=participant, status=pending) the instant
-      // auth.users got this id, before this code ever ran.
+      // auth.users got this id, before this code ever ran. `status` is
+      // deliberately omitted here — it starts (and stays) 'pending' until
+      // the participant confirms their email, at which point the
+      // `handle_auth_email_confirmed` trigger flips it to 'active'.
       const { error: usersError } = await admin.from('users').upsert(
         {
           id: userId,
           email: input.email,
           full_name: input.full_name,
           role: 'participant',
-          status: 'active',
         },
         { onConflict: 'id' }
       )
@@ -149,7 +153,7 @@ export async function POST(request: Request) {
         return apiError('Could not save your profile details. Please try again.', 500)
       }
 
-      return apiSuccess({ role: 'participant', status: 'active' }, 'Registration successful.')
+      return apiSuccess({ role: 'participant', status: 'pending' }, 'Registration successful.')
     }
 
     // ── College / Jury: staging-table application, no auth account yet. ──

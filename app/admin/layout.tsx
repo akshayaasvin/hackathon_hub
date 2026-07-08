@@ -15,6 +15,8 @@ import {
   Users,
   ShieldCheck,
   CreditCard,
+  Building2,
+  Wallet,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { RoleLoginGate } from '@/components/auth/RoleLoginGate'
@@ -32,6 +34,8 @@ const navItems = [
   { href: '/admin/results', label: 'Results', icon: <Trophy size={18} /> },
   { href: '/admin/certificates', label: 'Certificates', icon: <Award size={18} /> },
   { href: '/admin/colleges', label: 'Colleges', icon: <School size={18} /> },
+  { href: '/admin/institutions', label: 'Institutions', icon: <Building2 size={18} /> },
+  { href: '/admin/college-ledger', label: 'College Ledger', icon: <Wallet size={18} /> },
   { href: '/admin/jury', label: 'Jury Management', icon: <Gavel size={18} /> },
   { href: '/admin/users', label: 'User Management', icon: <Users size={18} /> },
 ]

@@ -7,6 +7,29 @@ const phone = z
   .max(20, 'Enter a valid phone number')
   .regex(/^[0-9+\-\s()]+$/, 'Enter a valid phone number')
 
+// Minimum registrable age, in years. Confirmed with the platform owner.
+export const MIN_PARTICIPANT_AGE_YEARS = 13
+
+function isAtLeastAge(value: string, years: number): boolean {
+  const dob = new Date(value)
+  if (Number.isNaN(dob.getTime())) return false
+  const cutoff = new Date()
+  cutoff.setFullYear(cutoff.getFullYear() - years)
+  cutoff.setHours(0, 0, 0, 0)
+  return dob.getTime() <= cutoff.getTime()
+}
+
+const dateOfBirth = z
+  .string()
+  .trim()
+  .min(1, 'Date of birth is required')
+  .refine((value) => !Number.isNaN(new Date(value).getTime()), 'Enter a valid date')
+  .refine((value) => new Date(value).getTime() <= Date.now(), 'Date of birth cannot be in the future')
+  .refine(
+    (value) => isAtLeastAge(value, MIN_PARTICIPANT_AGE_YEARS),
+    `You must be at least ${MIN_PARTICIPANT_AGE_YEARS} years old to register`
+  )
+
 export const participantRegisterSchema = z.object({
   role: z.literal('participant'),
   full_name: z.string().trim().min(2, 'Full name is required'),
@@ -19,7 +42,7 @@ export const participantRegisterSchema = z.object({
   experience_level: z.enum(['fresher', 'experienced']),
   contact_number: phone,
   address: z.string().trim().min(5, 'Address is required'),
-  date_of_birth: z.string().trim().min(1, 'Date of birth is required'),
+  date_of_birth: dateOfBirth,
 })
 export type ParticipantRegisterInput = z.infer<typeof participantRegisterSchema>
 
