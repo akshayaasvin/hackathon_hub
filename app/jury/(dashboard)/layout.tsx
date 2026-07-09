@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutDashboard, Send, Sliders, Gavel } from 'lucide-react'
+import { LayoutDashboard, Send, Sliders, Gavel, Trophy, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { RoleLoginGate } from '@/components/auth/RoleLoginGate'
 import { SideDrawer } from '@/components/dashboard/SideDrawer'
@@ -13,6 +13,8 @@ const navItems = [
   { href: '/jury', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
   { href: '/jury/submissions', label: 'Assigned Submissions', icon: <Send size={18} /> },
   { href: '/jury/scoring', label: 'Scoring', icon: <Sliders size={18} /> },
+  { href: '/results', label: 'Results', icon: <Trophy size={18} /> },
+  { href: '/profile', label: 'Profile', icon: <User size={18} /> },
 ]
 
 export default function JuryDashboardLayout({ children }: { children: React.ReactNode }) {

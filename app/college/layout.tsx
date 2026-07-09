@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, Trophy } from 'lucide-react'
+import { LayoutDashboard, Users, Trophy, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { SideDrawer } from '@/components/dashboard/SideDrawer'
 
@@ -12,6 +12,8 @@ const navItems = [
   { href: '/college', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
   { href: '/college/students', label: 'Registered Students', icon: <Users size={18} /> },
   { href: '/college/leaderboard', label: 'Top Performing Colleges', icon: <Trophy size={18} /> },
+  { href: '/results', label: 'Hackathon Results', icon: <Trophy size={18} /> },
+  { href: '/profile', label: 'Profile', icon: <User size={18} /> },
 ]
 
 export default function CollegeLayout({ children }: { children: React.ReactNode }) {

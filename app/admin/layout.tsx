@@ -17,6 +17,7 @@ import {
   CreditCard,
   Building2,
   Wallet,
+  User,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { RoleLoginGate } from '@/components/auth/RoleLoginGate'
@@ -38,6 +39,7 @@ const navItems = [
   { href: '/admin/college-ledger', label: 'College Ledger', icon: <Wallet size={18} /> },
   { href: '/admin/jury', label: 'Jury Management', icon: <Gavel size={18} /> },
   { href: '/admin/users', label: 'User Management', icon: <Users size={18} /> },
+  { href: '/profile', label: 'Profile', icon: <User size={18} /> },
 ]
 
 export default function AdminLayout({
