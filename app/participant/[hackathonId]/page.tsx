@@ -112,12 +112,23 @@ export default function HackathonDetailPage() {
     const timeoutMs = 30000
     const intervalMs = 2500
     const start = Date.now()
+    let resolvedStatus: string | null = null
     while (Date.now() - start < timeoutMs) {
       await new Promise((resolve) => setTimeout(resolve, intervalMs))
       const { data } = await supabase.from('registrations').select('status').eq('id', registrationId).single()
-      if (data && data.status !== 'payment_pending') break
+      if (data && data.status !== 'payment_pending') {
+        resolvedStatus = data.status
+        break
+      }
     }
     setVerifying(false)
+    // Webhook resolved the payment one way or the other — drop the stale
+    // pay panel so it doesn't linger alongside the new stage's UI (e.g. the
+    // "Create Team" button once approved). Still showing 'payment_pending'
+    // (timeout) keeps the panel up so the participant can retry.
+    if (resolvedStatus && resolvedStatus !== 'payment_pending') {
+      setShowPayPanel(false)
+    }
     await loadData()
   }
 

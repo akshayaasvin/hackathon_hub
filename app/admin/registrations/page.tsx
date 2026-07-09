@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { postJson } from '@/lib/apiFetch'
-import { Check, X, CreditCard } from 'lucide-react'
+import { Check, X, CreditCard, ShieldCheck } from 'lucide-react'
 
 export default function AdminRegistrationApprovalsPage() {
   const [rows, setRows] = useState<any[]>([])
+  const [autoApprovedRows, setAutoApprovedRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const router = useRouter()
@@ -38,32 +39,49 @@ export default function AdminRegistrationApprovalsPage() {
   }
 
   const loadRegistrations = async () => {
-    const { data: registrations } = await supabase
-      .from('registrations')
-      .select('*')
-      .eq('status', 'payment_submitted')
-      .order('registered_at', { ascending: true })
+    const [{ data: registrations }, { data: autoApproved }] = await Promise.all([
+      supabase
+        .from('registrations')
+        .select('*')
+        .eq('status', 'payment_submitted')
+        .order('registered_at', { ascending: true }),
+      // Razorpay webhook verified these directly (status skipped straight to
+      // 'approved' or beyond) — never routed through this page's Approve/
+      // Reject action. Shown read-only below for audit visibility only.
+      supabase
+        .from('registrations')
+        .select('*')
+        .eq('payment_method', 'razorpay')
+        .in('status', ['approved', 'team_created', 'submitted'])
+        .order('reviewed_at', { ascending: false }),
+    ])
 
     const regs = registrations || []
-    if (regs.length === 0) {
+    const autoRegs = autoApproved || []
+    if (regs.length === 0 && autoRegs.length === 0) {
       setRows([])
+      setAutoApprovedRows([])
       return
     }
 
-    const userIds = [...new Set(regs.map((r: any) => r.user_id))]
-    const hackathonIds = [...new Set(regs.map((r: any) => r.hackathon_id))]
+    const allRegs = [...regs, ...autoRegs]
+    const userIds = [...new Set(allRegs.map((r: any) => r.user_id))]
+    const hackathonIds = [...new Set(allRegs.map((r: any) => r.hackathon_id))]
 
     const [{ data: users }, { data: hackathons }] = await Promise.all([
       supabase.from('users').select('id, full_name, email').in('id', userIds),
       supabase.from('hackathons').select('id, name').in('id', hackathonIds),
     ])
 
-    const enriched = regs.map((r: any) => ({
-      ...r,
-      participant: users?.find((u: any) => u.id === r.user_id),
-      hackathon: hackathons?.find((h: any) => h.id === r.hackathon_id),
-    }))
-    setRows(enriched)
+    const enrich = (list: any[]) =>
+      list.map((r: any) => ({
+        ...r,
+        participant: users?.find((u: any) => u.id === r.user_id),
+        hackathon: hackathons?.find((h: any) => h.id === r.hackathon_id),
+      }))
+
+    setRows(enrich(regs))
+    setAutoApprovedRows(enrich(autoRegs))
   }
 
   const handleAction = async (registrationId: string, action: 'approve' | 'reject') => {
@@ -142,6 +160,50 @@ export default function AdminRegistrationApprovalsPage() {
                       </button>
                     </div>
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div style={{ margin: '48px 0 20px' }}>
+        <h2 style={{ fontSize: '20px', marginBottom: '8px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <ShieldCheck size={20} /> Auto-Approved Razorpay Payments
+        </h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+          Verified automatically by the Razorpay webhook — the participant already moved on to the next step.
+          Shown here for reference only; no action needed.
+        </p>
+      </div>
+
+      {autoApprovedRows.length === 0 ? (
+        <div className="glass-card" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+          No auto-approved Razorpay payments yet.
+        </div>
+      ) : (
+        <div className="table-container fade-in">
+          <table className="premium-table">
+            <thead>
+              <tr>
+                <th>Participant</th>
+                <th>Hackathon</th>
+                <th>Amount</th>
+                <th>Transaction ID</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {autoApprovedRows.map((r) => (
+                <tr key={r.id}>
+                  <td>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.participant?.full_name || 'Unnamed'}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{r.participant?.email}</div>
+                  </td>
+                  <td>{r.hackathon?.name || '-'}</td>
+                  <td>{r.payment_amount != null ? `₹${r.payment_amount}` : '-'}</td>
+                  <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>{r.payment_reference || '-'}</td>
+                  <td style={{ textTransform: 'capitalize' }}>{r.status.replace('_', ' ')}</td>
                 </tr>
               ))}
             </tbody>
