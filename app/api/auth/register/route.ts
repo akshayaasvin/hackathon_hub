@@ -154,7 +154,13 @@ export async function POST(request: Request) {
         return apiError('Could not save your profile details. Please try again.', 500)
       }
 
-      return apiSuccess({ role: 'participant', status: 'pending' }, 'Registration successful.')
+      // Reflects the real state: with Supabase's "Confirm email" requirement
+      // off, signUp() confirms the address immediately, so this is 'active'
+      // (per the 0022 migration's on_auth_user_created update) rather than
+      // the 'pending' this used to hardcode back when a confirmation email
+      // gated activation.
+      const status = signUpData.user.email_confirmed_at ? 'active' : 'pending'
+      return apiSuccess({ role: 'participant', status }, 'Registration successful.')
     }
 
     // ── College / Jury: staging-table application, no auth account yet. ──

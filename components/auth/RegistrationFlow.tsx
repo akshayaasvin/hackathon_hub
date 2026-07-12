@@ -29,8 +29,8 @@ const roleMeta: Record<RegisterRole, { title: string; blurb: string; formTitle: 
 
 const successCopy: Record<RegisterRole, { title: string; body: string }> = {
   participant: {
-    title: 'Check your inbox',
-    body: 'We sent a verification link to your email. Confirm it, then log in — your account activates automatically.',
+    title: "You're registered!",
+    body: 'Your account is active — log in now to browse open hackathons, register, and build your team.',
   },
   college: {
     title: 'Submitted for review',
