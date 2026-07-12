@@ -135,6 +135,7 @@ export async function POST(request: Request) {
       const { error: profileError } = await admin.from('participant_profiles').insert({
         user_id: userId,
         college_name: input.college_name,
+        college_id: input.college_id || null,
         passout_year: input.passout_year,
         degree: input.degree,
         domain: input.domain,

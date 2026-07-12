@@ -22,9 +22,10 @@ import { apiSuccess, apiError } from '@/lib/apiResponse'
 //   2. RAZORPAY_WEBHOOK_SECRET env var set to the signing secret Razorpay
 //      shows you when you create that webhook.
 //
-// Until that's wired up, use the "Mark Payment Complete" self-report flow
-// (app/api/registrations/[id]/confirm-payment) as a fallback — an admin can
-// still manually verify and approve from app/admin/registrations.
+// Every DB write below is checked and logged, and returns a 5xx on failure
+// (not 2xx) specifically so Razorpay's webhook retry policy kicks in
+// instead of the event being silently dropped — a registration that fails
+// to update here must stay 'payment_pending', never look "handled".
 export async function POST(request: Request) {
   try {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
         return apiSuccess({ ignored: true }, `Registration already "${registration.status}".`)
       }
 
-      await admin
+      const { error: approveError } = await admin
         .from('registrations')
         .update({
           status: 'approved',
@@ -87,8 +88,15 @@ export async function POST(request: Request) {
         })
         .eq('id', registrationId)
 
+      if (approveError) {
+        // Registration stays 'payment_pending' — return non-2xx so Razorpay
+        // retries this webhook instead of treating it as delivered.
+        console.error('[razorpay webhook] registrations approve update failed:', registrationId, approveError)
+        return apiError('Failed to update registration.', 500)
+      }
+
       if (orderId) {
-        await admin
+        const { error: orderError } = await admin
           .from('payment_orders')
           .update({
             status: 'paid',
@@ -96,23 +104,37 @@ export async function POST(request: Request) {
             updated_at: new Date().toISOString(),
           })
           .eq('razorpay_order_id', orderId)
+        if (orderError) {
+          // Registration is already approved (source of truth) — this is
+          // only the audit trail, so log and continue rather than fail the
+          // whole webhook and trigger a pointless retry.
+          console.error('[razorpay webhook] payment_orders update failed:', orderId, orderError)
+        }
       }
 
       return apiSuccess({ status: 'approved' }, 'Payment verified — registration approved.')
     }
 
     if (event === 'payment.failed') {
-      await admin
+      const { error: rejectError } = await admin
         .from('registrations')
         .update({ status: 'rejected' })
         .eq('id', registrationId)
         .eq('status', 'payment_pending')
 
+      if (rejectError) {
+        console.error('[razorpay webhook] registrations reject update failed:', registrationId, rejectError)
+        return apiError('Failed to update registration.', 500)
+      }
+
       if (orderId) {
-        await admin
+        const { error: orderError } = await admin
           .from('payment_orders')
           .update({ status: 'failed', updated_at: new Date().toISOString() })
           .eq('razorpay_order_id', orderId)
+        if (orderError) {
+          console.error('[razorpay webhook] payment_orders update failed:', orderId, orderError)
+        }
       }
 
       return apiSuccess({ status: 'rejected' }, 'Payment failed — registration marked rejected.')

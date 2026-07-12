@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import NotificationBell from '@/components/NotificationBell'
+import WhatsAppButton from '@/components/WhatsAppButton'
 import { Toaster, toast } from 'sonner'
 import './globals.css'
 
@@ -119,6 +120,7 @@ export default function RootLayout({
       <body className={pathname === '/' ? 'body-landing-light' : ''}>
         <Navbar />
         <main>{children}</main>
+        <WhatsAppButton />
         <Toaster position="top-right" richColors />
       </body>
     </html>

@@ -12,8 +12,6 @@ const gridStyle: React.CSSProperties = {
   columnGap: '16px',
 }
 
-const OTHER_COLLEGE = '__other__'
-
 function todayISODate(): string {
   return new Date().toISOString().slice(0, 10)
 }
@@ -36,7 +34,9 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
   const [serverError, setServerError] = useState('')
   const [loading, setLoading] = useState(false)
   const [colleges, setColleges] = useState<{ id: string; name: string }[]>([])
-  const [collegeChoice, setCollegeChoice] = useState('')
+  const [collegeId, setCollegeId] = useState<string | null>(null)
+  const [collegeQuery, setCollegeQuery] = useState('')
+  const [showCollegeOptions, setShowCollegeOptions] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -55,17 +55,35 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
   const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }))
 
-  const handleCollegeChoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const collegeMatches =
+    collegeQuery.trim().length > 0
+      ? colleges.filter((c) => c.name.toLowerCase().includes(collegeQuery.trim().toLowerCase())).slice(0, 8)
+      : colleges.slice(0, 8)
+
+  const handleCollegeQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
-    setCollegeChoice(value)
-    setForm((f) => ({ ...f, college_name: value === OTHER_COLLEGE ? '' : value }))
+    setCollegeQuery(value)
+    setCollegeId(null)
+    setForm((f) => ({ ...f, college_name: value }))
+    setShowCollegeOptions(true)
+  }
+
+  const handleCollegeSelect = (college: { id: string; name: string }) => {
+    setCollegeQuery(college.name)
+    setCollegeId(college.id)
+    setForm((f) => ({ ...f, college_name: college.name }))
+    setShowCollegeOptions(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setServerError('')
 
-    const parsed = participantRegisterSchema.safeParse({ role: 'participant', ...form })
+    const parsed = participantRegisterSchema.safeParse({
+      role: 'participant',
+      ...form,
+      college_id: collegeId || undefined,
+    })
     if (!parsed.success) {
       const fieldErrors: Record<string, string> = {}
       for (const issue of parsed.error.issues) {
@@ -128,31 +146,60 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
 
       <div style={gridStyle}>
         <FormField label="College Name" error={errors.college_name}>
-          <select
-            className="premium-input premium-select"
-            value={collegeChoice}
-            onChange={handleCollegeChoiceChange}
-            required
-          >
-            <option value="" disabled>
-              Select your college
-            </option>
-            {colleges.map((c) => (
-              <option key={c.id} value={c.name}>
-                {c.name}
-              </option>
-            ))}
-            <option value={OTHER_COLLEGE}>Other (not listed)</option>
-          </select>
-          {collegeChoice === OTHER_COLLEGE && (
+          <div style={{ position: 'relative' }}>
             <input
               className="premium-input"
-              style={{ marginTop: '8px' }}
-              placeholder="Enter your college name"
-              value={form.college_name}
-              onChange={set('college_name')}
+              placeholder="Search for your college..."
+              value={collegeQuery}
+              onChange={handleCollegeQueryChange}
+              onFocus={() => setShowCollegeOptions(true)}
+              onBlur={() => setTimeout(() => setShowCollegeOptions(false), 150)}
+              autoComplete="off"
               required
             />
+            {showCollegeOptions && collegeMatches.length > 0 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 4px)',
+                  left: 0,
+                  right: 0,
+                  zIndex: 20,
+                  maxHeight: '220px',
+                  overflowY: 'auto',
+                  background: 'var(--surface, #fff)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '10px',
+                  boxShadow: 'var(--glass-shadow)',
+                }}
+              >
+                {collegeMatches.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onMouseDown={() => handleCollegeSelect(c)}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '10px 14px',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {collegeQuery.trim().length > 0 && !collegeId && (
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+              My college isn't listed — this will be saved and flagged for admin to link later.
+            </p>
           )}
         </FormField>
         <FormField label="Passout Year" error={errors.passout_year}>

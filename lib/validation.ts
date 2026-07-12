@@ -36,6 +36,10 @@ export const participantRegisterSchema = z.object({
   email: z.email('Enter a valid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   college_name: z.string().trim().min(2, 'College name is required'),
+  // Set only when the student picked a real match from the registration
+  // form's dropdown — left undefined for the "my college isn't listed"
+  // free-text fallback, which admin can link later. See 0021 migration.
+  college_id: z.string().uuid().optional(),
   passout_year: z.coerce.number().int().min(1990).max(2100),
   degree: z.string().trim().min(2, 'Degree is required'),
   domain: z.string().trim().min(2, 'Domain / branch is required'),

@@ -2,13 +2,15 @@
 
 import React, { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Search, Eye, X, Trophy, Users, BookOpen, TrendingUp, Copy, CheckCircle2 } from 'lucide-react'
+import { Plus, Search, Eye, X, Trophy, Users, BookOpen, TrendingUp, Copy, CheckCircle2, Link2 } from 'lucide-react'
 import { adminCreateCollegeSchema } from '@/lib/validation'
 import { postJson } from '@/lib/apiFetch'
 
 export default function AdminCollegesPage() {
   const [colleges, setColleges] = useState<any[]>([])
+  const [collegeOptions, setCollegeOptions] = useState<{ id: string; name: string }[]>([])
   const [participants, setParticipants] = useState<any[]>([])
+  const [participantUsers, setParticipantUsers] = useState<any[]>([])
   const [teamMembers, setTeamMembers] = useState<any[]>([])
   const [evaluations, setEvaluations] = useState<any[]>([])
   const [hackathons, setHackathons] = useState<any[]>([])
@@ -16,6 +18,8 @@ export default function AdminCollegesPage() {
   const [teams, setTeams] = useState<any[]>([])
   const [submissions, setSubmissions] = useState<any[]>([])
   const [selectedHackathonId, setSelectedHackathonId] = useState('')
+  const [linkChoice, setLinkChoice] = useState<Record<string, string>>({})
+  const [linkingUserId, setLinkingUserId] = useState<string | null>(null)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [studentSearchQuery, setStudentSearchQuery] = useState('')
@@ -49,7 +53,7 @@ export default function AdminCollegesPage() {
   const loadColleges = async () => {
     try {
       setLoading(true)
-      const [usersRes, participantsRes, teamMembersRes, evaluationsRes, hackathonsRes, registrationsRes, teamsRes, submissionsRes] = await Promise.all([
+      const [usersRes, participantsRes, teamMembersRes, evaluationsRes, hackathonsRes, registrationsRes, teamsRes, submissionsRes, collegeOptionsRes] = await Promise.all([
         supabase.from('users').select('*').eq('role', 'college'),
         supabase.from('participant_profiles').select('*'),
         supabase.from('team_members').select('*'),
@@ -58,11 +62,13 @@ export default function AdminCollegesPage() {
         supabase.from('registrations').select('hackathon_id, user_id'),
         supabase.from('teams').select('id, hackathon_id'),
         supabase.from('submissions').select('id, team_id'),
+        supabase.from('colleges').select('id, name').order('name', { ascending: true }),
       ])
       setHackathons(hackathonsRes.data || [])
       setRegistrations(registrationsRes.data || [])
       setTeams(teamsRes.data || [])
       setSubmissions(submissionsRes.data || [])
+      setCollegeOptions(collegeOptionsRes.data || [])
 
       const userList = usersRes.data || []
       const { data: profiles } = userList.length
@@ -78,6 +84,12 @@ export default function AdminCollegesPage() {
       setParticipants(participantsRes.data || [])
       setTeamMembers(teamMembersRes.data || [])
       setEvaluations(evaluationsRes.data || [])
+
+      const unmatchedUserIds = (participantsRes.data || []).filter((p: any) => !p.college_id).map((p: any) => p.user_id)
+      const { data: pUsers } = unmatchedUserIds.length
+        ? await supabase.from('users').select('id, full_name, email').in('id', unmatchedUserIds)
+        : { data: [] as any[] }
+      setParticipantUsers(pUsers || [])
     } catch (e) {
       console.error(e)
     } finally {
@@ -95,6 +107,25 @@ export default function AdminCollegesPage() {
     setSelectedCollege(college)
     setStudentSearchQuery('')
     setShowDetailsModal(true)
+  }
+
+  const handleLinkCollege = async (userId: string) => {
+    const collegeId = linkChoice[userId]
+    if (!collegeId) {
+      alert('Pick a college to link this student to.')
+      return
+    }
+    setLinkingUserId(userId)
+    try {
+      const result = await postJson(`/api/admin/participants/${userId}/link-college`, { collegeId })
+      if (!result.success) {
+        alert('Error: ' + result.message)
+        return
+      }
+      await loadColleges()
+    } finally {
+      setLinkingUserId(null)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -211,6 +242,10 @@ export default function AdminCollegesPage() {
 
   const top3Colleges = getCollegesLeaderboard()
 
+  const unmatchedParticipants = participants
+    .filter((p: any) => !p.college_id)
+    .map((p: any) => ({ ...p, user: participantUsers.find((u: any) => u.id === p.user_id) }))
+
   if (loading) {
     return <div style={{ padding: '100px 20px', textAlign: 'center', fontSize: '18px', color: 'var(--text-secondary)' }}>Loading Colleges...</div>
   }
@@ -299,6 +334,67 @@ export default function AdminCollegesPage() {
           </div>
         )}
       </div>
+
+      {unmatchedParticipants.length > 0 && (
+        <div className="glass-card" style={{ padding: '24px', marginBottom: '40px', borderLeft: '4px solid var(--warning)' }}>
+          <h2 style={{ fontSize: '20px', marginBottom: '8px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Link2 size={20} /> Unmatched Student Colleges ({unmatchedParticipants.length})
+          </h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '16px' }}>
+            These students typed a college name that wasn't in the dropdown at registration. Link each to the
+            correct college record below — this only fills in the audit link, it doesn't change what the
+            student typed.
+          </p>
+          <div className="table-container">
+            <table className="premium-table">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Typed College Name</th>
+                  <th>Link To</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {unmatchedParticipants.map((p: any) => (
+                  <tr key={p.user_id}>
+                    <td>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.user?.full_name || 'Unnamed'}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{p.user?.email}</div>
+                    </td>
+                    <td>{p.college_name}</td>
+                    <td>
+                      <select
+                        className="premium-input premium-select"
+                        style={{ minWidth: '220px' }}
+                        value={linkChoice[p.user_id] || ''}
+                        onChange={(e) => setLinkChoice((prev) => ({ ...prev, [p.user_id]: e.target.value }))}
+                      >
+                        <option value="">Select college...</option>
+                        {collegeOptions.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <button
+                        onClick={() => handleLinkCollege(p.user_id)}
+                        disabled={linkingUserId === p.user_id}
+                        className="btn btn-success"
+                        style={{ padding: '6px 12px', fontSize: '13px' }}
+                      >
+                        {linkingUserId === p.user_id ? 'Linking...' : 'Link'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {top3Colleges.length > 0 && (
         <>

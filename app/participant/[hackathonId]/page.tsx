@@ -31,7 +31,6 @@ export default function HackathonDetailPage() {
   const [inviteEmail, setInviteEmail] = useState('')
   const [showSubmissionModal, setShowSubmissionModal] = useState(false)
   const [showPayPanel, setShowPayPanel] = useState(false)
-  const [paymentReference, setPaymentReference] = useState('')
   const [verifying, setVerifying] = useState(false)
 
   useEffect(() => {
@@ -159,24 +158,6 @@ export default function HackathonDetailPage() {
     } finally {
       setActionLoading(false)
     }
-  }
-
-  const handleConfirmPayment = async () => {
-    if (!paymentReference.trim()) {
-      alert('Please paste your payment/transaction reference.')
-      return
-    }
-    setActionLoading(true)
-    const result = await postJson(`/api/registrations/${registration.id}/confirm-payment`, { paymentReference })
-    if (!result.success) {
-      alert('Error: ' + result.message)
-    } else {
-      alert('Payment submitted for admin review.')
-      setShowPayPanel(false)
-      setPaymentReference('')
-      await loadData()
-    }
-    setActionLoading(false)
   }
 
   const handleCreateTeam = async () => {
@@ -332,36 +313,22 @@ export default function HackathonDetailPage() {
         {(status === 'payment_pending' || showPayPanel) && (
           <div>
             {verifying ? (
-              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '16px' }}>
-                Verifying your payment… this usually takes a few seconds.
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                Verifying your payment… this usually takes a few seconds. Razorpay's confirmation is the only
+                thing that unlocks the next step — no admin action needed.
               </p>
             ) : (
               <button
                 onClick={handlePayNow}
                 disabled={actionLoading}
                 className="btn btn-primary"
-                style={{ padding: '12px 28px', marginBottom: '16px' }}
+                style={{ padding: '12px 28px' }}
               >
                 {actionLoading
                   ? 'Opening...'
                   : `Pay${hackathon.registration_fee ? ` ₹${hackathon.registration_fee}` : ''} with Razorpay`}
               </button>
             )}
-            <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-              Already paid but not reflected yet? Paste your payment reference here to notify the admin:
-            </label>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <input
-                className="premium-input"
-                style={{ flex: 1, minWidth: '220px' }}
-                placeholder="Razorpay payment ID / transaction ref"
-                value={paymentReference}
-                onChange={(e) => setPaymentReference(e.target.value)}
-              />
-              <button onClick={handleConfirmPayment} disabled={actionLoading} className="btn btn-primary" style={{ padding: '10px 20px' }}>
-                {actionLoading ? 'Submitting...' : 'Mark Payment Complete'}
-              </button>
-            </div>
           </div>
         )}
 
@@ -372,9 +339,16 @@ export default function HackathonDetailPage() {
         )}
 
         {status === 'approved' && (
-          <button onClick={() => setShowTeamModal(true)} disabled={actionLoading} className="btn btn-success" style={{ padding: '12px 28px' }}>
-            Create Team
-          </button>
+          <div>
+            <button onClick={() => setShowTeamModal(true)} disabled={actionLoading} className="btn btn-success" style={{ padding: '12px 28px' }}>
+              Create Team
+            </button>
+            {registration?.payment_reference && (
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '10px' }}>
+                Payment reference: <span style={{ fontFamily: 'monospace' }}>{registration.payment_reference}</span>
+              </p>
+            )}
+          </div>
         )}
 
         {status === 'team_created' && (
