@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, signOutAndRedirect } from '@/lib/supabase/client'
 import NotificationBell from '@/components/NotificationBell'
 import WhatsAppButton from '@/components/WhatsAppButton'
 import { Toaster, toast } from 'sonner'
@@ -59,10 +59,7 @@ function Navbar() {
           <>
             <NotificationBell />
             <button
-              onClick={async () => {
-                await supabase.auth.signOut()
-                window.location.href = '/'
-              }}
+              onClick={() => signOutAndRedirect('/')}
               className="btn"
               style={{
                 padding: '6px 12px',

@@ -1,22 +1,17 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { signOutAndRedirect } from '@/lib/supabase/client'
 
 export default function AuthErrorPage() {
   const router = useRouter()
-  const supabase = createClient()
 
   const handleRetry = () => {
     router.refresh()
     router.push('/login')
   }
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
-  }
+  const handleSignOut = () => signOutAndRedirect('/login')
 
   return (
     <div

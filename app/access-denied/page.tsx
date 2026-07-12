@@ -1,8 +1,8 @@
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { useSearchParams } from 'next/navigation'
+import { createClient, signOutAndRedirect } from '@/lib/supabase/client'
 
 const dashboardByRole: Record<string, string> = {
   admin: '/admin',
@@ -18,7 +18,6 @@ const areaMessage: Record<string, string> = {
 }
 
 function AccessDeniedContent() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
   const [ownDashboard, setOwnDashboard] = useState('/participant')
@@ -34,11 +33,7 @@ function AccessDeniedContent() {
     })
   }, [])
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
-  }
+  const handleSignOut = () => signOutAndRedirect('/login')
 
   return (
     <div
