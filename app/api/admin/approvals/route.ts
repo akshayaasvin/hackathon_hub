@@ -167,6 +167,19 @@ export async function POST(request: Request) {
         college_address: application.college_address,
       })
       profileError = error
+
+      // Keep the registration-form dropdown (colleges table, 0015) in sync
+      // with every institution that actually onboards — not just the
+      // one-time backfill at migration time. Non-fatal: the account is
+      // already created either way, this only affects dropdown coverage.
+      if (!error) {
+        const { error: collegeUpsertError } = await admin
+          .from('colleges')
+          .upsert({ name: application.college_name }, { onConflict: 'name', ignoreDuplicates: true })
+        if (collegeUpsertError) {
+          console.error('[approvals] colleges upsert failed (non-fatal):', collegeUpsertError)
+        }
+      }
     } else {
       const { error } = await admin.from('jury_profiles').insert({
         user_id: userId,
