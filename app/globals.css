@@ -701,8 +701,8 @@ body.body-landing-light {
   .hero-grid-left { text-align: center !important; }
   .hero-stats-row { justify-content: center !important; }
   .scroll-indicator { display: none !important; }
-  .admin-layout-container { min-height: auto !important; }
-  .dashboard-mobile-bar { display: flex !important; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border-color); background: rgba(255,255,255,0.85); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 500; width: 100%; }
+  .admin-layout-container { flex-direction: column !important; min-height: auto !important; }
+  .dashboard-mobile-bar { display: flex !important; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border-color); background: rgba(255,255,255,0.85); backdrop-filter: blur(10px); position: sticky; top: 56px; z-index: 500; width: 100%; flex-shrink: 0; }
   .dashboard-hamburger-btn { background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 6px; border-radius: 8px; }
   .dashboard-hamburger-btn:hover { background: var(--primary-glow); }
   .dashboard-mobile-bar-title { font-size: 15px; font-weight: 700; color: var(--text-primary); }
