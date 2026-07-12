@@ -1,0 +1,14 @@
+{
+  "multiRole": {
+    "email": "ui-multirole-1783854682037@example.com",
+    "userId": "f1fff26f-630d-45c5-8604-eefc67554260"
+  },
+  "richParticipant": {
+    "email": "ui-richparticipant-1783854682675@example.com",
+    "userId": "b3651ab5-3e15-4504-95d2-4c29151c69fc",
+    "regId": "92b8c946-9d9e-4868-ae3f-879433667431",
+    "teamId": "82a627b2-6021-4eee-a6d4-d911159b5baf"
+  },
+  "hackathonId": "c3c67f8e-c67f-45c1-be5b-426b3081cab9",
+  "password": "TestPassword123!"
+}

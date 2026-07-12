@@ -14,6 +14,7 @@ interface LedgerRow extends College {
 interface ImportPreview {
   import: CollegePaymentImport
   rows: CollegePaymentImportRow[]
+  issues?: { row: number; reason: string }[]
 }
 
 async function uploadImport(formData: FormData): Promise<{ success: boolean; message: string; data?: ImportPreview }> {
@@ -367,6 +368,23 @@ export default function AdminCollegeLedgerPage() {
               {preview.import.matched_count} matched, {preview.import.unmatched_count} unmatched out of{' '}
               {preview.import.total_rows} rows. Nothing has been saved yet — only committing marks students paid.
             </p>
+
+            {preview.issues && preview.issues.length > 0 && (
+              <div
+                className="glass-card"
+                style={{ borderLeft: '4px solid var(--warning)', padding: '16px 20px', marginBottom: '20px' }}
+              >
+                <p style={{ fontWeight: 600, fontSize: '13px', color: 'var(--warning)', marginBottom: '8px' }}>
+                  {preview.issues.length} row(s) in this file were skipped:
+                </p>
+                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  {preview.issues.map((issue, i) => (
+                    <li key={i}>Row {issue.row}: {issue.reason}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="table-container" style={{ marginBottom: '24px' }}>
               <table className="premium-table" style={{ fontSize: '13px' }}>
                 <thead>

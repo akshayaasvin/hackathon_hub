@@ -674,6 +674,12 @@ body.body-landing-light {
   .navbar-desktop-links { display: none !important; }
   .hamburger-btn { display: block !important; }
   .premium-container { padding: 20px 14px !important; }
+  /* Reserves clearance below every page's content so the fixed WhatsApp
+     button (bottom-right, ~56px + margin) never sits on top of whatever
+     happens to be the last element on the page — confirmed to genuinely
+     overlap the Register-form submit button and the participant page's
+     "Manage Team" button at their natural end-of-scroll position. */
+  main { padding-bottom: 90px; }
   .glass-card { padding: 20px 14px !important; }
   .premium-table { min-width: 600px !important; }
   .table-container { position: relative; }

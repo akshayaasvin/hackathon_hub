@@ -46,17 +46,39 @@ export async function POST(request: Request) {
       transformHeader: normalizeHeader,
     })
 
-    if (parsed.errors.length > 0) {
-      console.error('[college-imports/upload] CSV parse errors:', parsed.errors)
-      return apiError('Could not parse this CSV file. Check the format and try again.', 400)
+    // Row-level issues surfaced to the admin instead of silently vanishing
+    // or aborting the whole file. Row numbers are 1-indexed + header row,
+    // so they match what the admin sees if they open the CSV in a
+    // spreadsheet app.
+    const issues: { row: number; reason: string }[] = []
+
+    // A single ragged row (wrong field count) used to fail parsed.errors
+    // and reject the *entire* file with a generic message — a 500-row
+    // upload with one bad line lost every good row. Now only that
+    // specific row is skipped; everything else still gets processed.
+    const errorRowMessages = new Map<number, string>()
+    for (const e of parsed.errors) {
+      if (e.row != null) errorRowMessages.set(e.row, e.message || 'Could not parse this row.')
     }
 
-    const rows = parsed.data
-      .map((raw) => {
+    const candidateRows = parsed.data
+      .map((raw, idx) => {
+        if (errorRowMessages.has(idx)) {
+          issues.push({ row: idx + 2, reason: errorRowMessages.get(idx)! })
+          return null
+        }
         const email = (raw.email || raw.email_address || '').trim().toLowerCase()
+        if (!email) {
+          // Previously filtered out with zero trace — not even counted
+          // as "unmatched" — so a blank-email row just vanished with no
+          // way for the admin to know it existed.
+          issues.push({ row: idx + 2, reason: 'Missing email — row skipped.' })
+          return null
+        }
         const amountRaw = raw.amount ?? raw.payment_amount
         const amount = amountRaw !== undefined && amountRaw !== '' ? Number(amountRaw) : null
         return {
+          rowIndex: idx,
           email,
           student_name: (raw.name || raw.student_name || '').trim() || null,
           department: (raw.department || '').trim() || null,
@@ -64,10 +86,26 @@ export async function POST(request: Request) {
           amount: amount !== null && Number.isFinite(amount) ? amount : null,
         }
       })
-      .filter((row) => row.email)
+      .filter((r): r is Exclude<typeof r, null> => r !== null)
+
+    // Duplicate emails within this same file: keep only the last
+    // occurrence. Previously both rows were inserted as separately
+    // "matched", both pointing at the same registration — committing
+    // would update that registration twice, and whichever processed last
+    // silently won (a different amount/reference with zero warning).
+    const lastRowIndexForEmail = new Map<string, number>()
+    for (const row of candidateRows) lastRowIndexForEmail.set(row.email, row.rowIndex)
+
+    const rows = candidateRows.filter((row) => {
+      const isLastOccurrence = lastRowIndexForEmail.get(row.email) === row.rowIndex
+      if (!isLastOccurrence) {
+        issues.push({ row: row.rowIndex + 2, reason: `Duplicate email "${row.email}" — a later row for the same email was used instead.` })
+      }
+      return isLastOccurrence
+    })
 
     if (rows.length === 0) {
-      return apiError('No usable rows found — make sure the CSV has an "email" column.', 400)
+      return apiError('No usable rows found — make sure the CSV has an "email" column and at least one valid row.', 400)
     }
 
     const admin = createAdminClient()
@@ -85,12 +123,13 @@ export async function POST(request: Request) {
     let matchedCount = 0
     let unmatchedCount = 0
     const rowInserts = rows.map((row) => {
+      const { rowIndex, ...rest } = row
       const userId = userIdByEmail.get(row.email)
       const registration = userId ? registrationByUserId.get(userId) : undefined
       const matched = !!registration
       if (matched) matchedCount++
       else unmatchedCount++
-      return { ...row, match_status: matched ? 'matched' : 'unmatched', registration_id: registration?.id || null }
+      return { ...rest, match_status: matched ? 'matched' : 'unmatched', registration_id: registration?.id || null }
     })
 
     const { data: importRow, error: importError } = await admin
@@ -124,9 +163,10 @@ export async function POST(request: Request) {
       return apiError('Could not save the import rows. Please try again.', 500)
     }
 
+    const issueSuffix = issues.length > 0 ? `, ${issues.length} row(s) skipped — see details below` : ''
     return apiSuccess(
-      { import: importRow, rows: insertedRows },
-      `Parsed ${rows.length} rows — ${matchedCount} matched, ${unmatchedCount} unmatched.`
+      { import: importRow, rows: insertedRows, issues },
+      `Parsed ${rows.length} usable rows — ${matchedCount} matched, ${unmatchedCount} unmatched${issueSuffix}.`
     )
   } catch (err: any) {
     console.error('[college-imports/upload] unhandled error:', err)
