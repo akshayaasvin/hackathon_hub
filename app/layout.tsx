@@ -15,30 +15,43 @@ function Navbar() {
   const supabase = createClient()
 
   useEffect(() => {
-    const getAuthState = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        setIsLoggedIn(true)
+    // A one-time getUser() on mount used to be the only check here, so the
+    // header never updated after a client-side navigation (LoginForm's
+    // router.push has no reason to remount the root layout, and logout's
+    // full reload is a separate code path) — it just kept showing whatever
+    // was true when this component first mounted. onAuthStateChange fires
+    // on every real transition (SIGNED_IN, SIGNED_OUT, token refresh,
+    // another tab signing out), so the header now always reflects the
+    // actual session instead of a stale snapshot from first paint.
+    const syncAuthState = async (user: { id: string; email?: string; user_metadata?: any } | null) => {
+      setIsLoggedIn(!!user)
+      if (!user) return
 
-        const { data: userData, error } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', user.id)
-          .single()
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
 
-        if (error || !userData) {
-          const newProfile = {
-            id: user.id,
-            email: user.email,
-            full_name: user.user_metadata?.full_name || 'Participant',
-            role: user.user_metadata?.role || 'participant',
-            created_at: new Date().toISOString()
-          }
-          await supabase.from('users').insert(newProfile).select().single()
+      if (error || !userData) {
+        const newProfile = {
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || 'Participant',
+          role: user.user_metadata?.role || 'participant',
+          created_at: new Date().toISOString()
         }
+        await supabase.from('users').insert(newProfile).select().single()
       }
     }
-    getAuthState()
+
+    supabase.auth.getUser().then(({ data: { user } }) => syncAuthState(user))
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      syncAuthState(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   return (
