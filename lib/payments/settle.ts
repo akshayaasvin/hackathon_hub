@@ -189,7 +189,7 @@ export async function sendWebinarConfirmation(admin: SupabaseClient, webinarRegi
   if (!data) return
   const webinar: any = Array.isArray((data as any).webinar) ? (data as any).webinar[0] : (data as any).webinar
   if (!webinar) return
-  await sendEmail({
+  const result: any = await sendEmail({
     to: data.email,
     subject: `You're registered: ${webinar.title}`,
     html: webinarConfirmationEmailHtml({
@@ -201,6 +201,10 @@ export async function sendWebinarConfirmation(admin: SupabaseClient, webinarRegi
       amount: data.amount != null ? Number(data.amount) : null,
     }),
   })
+  // sendEmail reports problems in its return value instead of throwing; surface them so the
+  // callers' logs (and the admin "Resend" button) show WHY an email did not go out.
+  if (result?.skipped) throw new Error('Email is not configured (RESEND_API_KEY is missing).')
+  if (result?.error) throw new Error(result.error.message || 'The email provider rejected the message.')
 }
 
 /**

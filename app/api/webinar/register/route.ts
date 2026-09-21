@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createRazorpayClient } from '@/lib/razorpay'
 import { getOrCreateOrder } from '@/lib/payments/orders'
 import { sendWebinarConfirmation } from '@/lib/payments/settle'
+import { parseQuestions, validateAnswers } from '@/lib/webinarQuestions'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
 
 // Public (no login) webinar registration + payment start.
@@ -21,6 +22,8 @@ const bodySchema = z.object({
   fullName: z.string().trim().min(2, 'Full name is required').max(100),
   email: z.email('Enter a valid email address').max(254),
   phone: z.string().trim().min(7, 'Enter a valid mobile number').max(20),
+  // Answers to the admin-defined questions, keyed by question id. Validated below.
+  answers: z.record(z.string(), z.unknown()).optional(),
 })
 
 // Accepts 10 digits, optionally prefixed with +91 / 91 / 0.
@@ -51,12 +54,17 @@ export async function POST(request: Request) {
 
     const { data: webinar, error: webinarError } = await admin
       .from('webinars')
-      .select('id, title, fee, currency, status')
+      .select('id, title, fee, currency, status, questions')
       .eq('id', parsed.data.webinarId)
       .maybeSingle()
     if (webinarError) throw webinarError
     if (!webinar) return apiError('Webinar not found.', 404)
     if (webinar.status !== 'published') return apiError('Registration for this webinar is closed.', 400)
+
+    // Every answer is checked against THIS webinar's questions on the server.
+    const validated = validateAnswers(parseQuestions(webinar.questions), parsed.data.answers)
+    if (validated.ok === false) return apiError(validated.message, 400)
+    const answers = validated.answers
 
     const fee = Number(webinar.fee)
     const currency = String(webinar.currency || 'INR')
@@ -83,7 +91,7 @@ export async function POST(request: Request) {
     if (existing) {
       const { error } = await admin
         .from('webinar_registrations')
-        .update({ full_name: fullName, phone, access_token: accessToken, updated_at: new Date().toISOString() })
+        .update({ full_name: fullName, phone, answers, access_token: accessToken, updated_at: new Date().toISOString() })
         .eq('id', existing.id)
         .eq('status', 'payment_pending')
       if (error) throw error
@@ -96,6 +104,7 @@ export async function POST(request: Request) {
           full_name: fullName,
           email,
           phone,
+          answers,
           status: fee > 0 ? 'payment_pending' : 'free',
           amount: fee > 0 ? null : 0,
           currency,
@@ -115,7 +124,7 @@ export async function POST(request: Request) {
           registrationId = retry.data.id
           const { error } = await admin
             .from('webinar_registrations')
-            .update({ access_token: accessToken, updated_at: new Date().toISOString() })
+            .update({ answers, access_token: accessToken, updated_at: new Date().toISOString() })
             .eq('id', registrationId)
           if (error) throw error
         } else {
