@@ -18,6 +18,8 @@ import {
   Building2,
   Wallet,
   User,
+  Video,
+  Ticket,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { RoleLoginGate } from '@/components/auth/RoleLoginGate'
@@ -30,6 +32,8 @@ const navItems = [
   { href: '/admin/approvals', label: 'Account Approvals', icon: <CheckSquare size={18} /> },
   { href: '/admin/registrations', label: 'Payment Approvals', icon: <CreditCard size={18} /> },
   { href: '/admin/applications', label: 'Applications', icon: <FileSpreadsheet size={18} /> },
+  { href: '/admin/webinars', label: 'Webinars', icon: <Video size={18} /> },
+  { href: '/admin/webinar-registrations', label: 'Webinar Registrations', icon: <Ticket size={18} /> },
   { href: '/admin/submissions', label: 'Submissions', icon: <Send size={18} /> },
   { href: '/admin/announcements', label: 'Announcements', icon: <Megaphone size={18} /> },
   { href: '/admin/results', label: 'Results', icon: <Trophy size={18} /> },

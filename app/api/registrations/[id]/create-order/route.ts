@@ -1,13 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createRazorpayClient } from '@/lib/razorpay'
+import { getOrCreateOrder } from '@/lib/payments/orders'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
 
-// registered/rejected -> payment_pending (if not already), then creates a
-// real Razorpay Order for the hackathon's registration_fee. Replaces the old
-// hosted Payment Button + /pay route — the participant clicks "Pay Now" once
-// and this does both steps, notes carry student_id/hackathon_id/registration_id
-// so the webhook can find its way back to this row.
+// registered/rejected -> payment_pending (if not already), then creates (or re-uses)
+// a real Razorpay Order for the hackathon's registration_fee. The participant clicks
+// "Pay Now" once and this does both steps. The order is recorded in `payment_orders`
+// (kind = 'hackathon') BEFORE it is returned, which is what lets the webhook, the
+// verify route and the sync route map a payment back to this registration.
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
     const supabase = await createClient()
@@ -66,39 +67,21 @@ export async function POST(request: Request, { params }: { params: { id: string 
       }
     }
 
-    const amountPaise = Math.round(hackathon.registration_fee * 100)
-
     let order
     try {
-      order = await razorpay.orders.create({
-        amount: amountPaise,
+      order = await getOrCreateOrder(admin, razorpay, {
+        kind: 'hackathon',
+        targetId: registration.id,
+        amountRupees: Number(hackathon.registration_fee),
         currency: 'INR',
-        notes: {
-          registration_id: registration.id,
-          student_id: user.id,
-          hackathon_id: registration.hackathon_id,
-        },
+        notes: { student_id: user.id, hackathon_id: registration.hackathon_id },
       })
     } catch (err: any) {
-      console.error('[create-order] razorpay order creation failed:', err)
+      console.error('[create-order] order creation failed:', err)
       return apiError('Could not start payment. Please try again.', 500)
     }
 
-    const { error: insertError } = await admin.from('payment_orders').insert({
-      registration_id: registration.id,
-      razorpay_order_id: order.id,
-      amount: hackathon.registration_fee,
-      currency: typeof order.currency === 'string' ? order.currency : 'INR',
-      status: 'created',
-    })
-    if (insertError) {
-      console.error('[create-order] payment_orders insert failed:', insertError)
-    }
-
-    return apiSuccess(
-      { order_id: order.id, amount: amountPaise, currency: order.currency, key_id: process.env.RAZORPAY_KEY_ID },
-      'Order created.'
-    )
+    return apiSuccess(order, 'Order created.')
   } catch (err: any) {
     console.error('[create-order] unhandled error:', err)
     return apiError('Something went wrong. Please try again.', 500)

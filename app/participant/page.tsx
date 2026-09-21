@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Calendar } from 'lucide-react'
+import { Calendar, Video } from 'lucide-react'
+import WebinarList from '@/components/webinar/WebinarList'
 import { withTimeout } from '@/lib/utils'
 import { RegistrationStatusChip, type RegistrationStatusValue } from '@/components/participant/RegistrationStatusChip'
 
@@ -200,6 +201,11 @@ export default function ParticipantDashboard() {
           })}
         </div>
       )}
+
+      <h2 style={{ fontSize: '20px', margin: '48px 0 20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <Video size={20} color="var(--primary)" /> Webinars
+      </h2>
+      <WebinarList variant="dashboard" />
     </div>
   )
 }

@@ -7,7 +7,7 @@ import { postJson } from '@/lib/apiFetch'
 import { ArrowLeft, Calendar, Users, Trophy, ShieldCheck } from 'lucide-react'
 import { HackathonStepper } from '@/components/participant/HackathonStepper'
 import { RegistrationStatusChip, type RegistrationStatusValue } from '@/components/participant/RegistrationStatusChip'
-import { openRazorpayCheckout, type RazorpayOrder } from '@/components/RazorpayCheckout'
+import { openRazorpayCheckout, verifyPaymentOnServer, type RazorpayCheckoutResult } from '@/components/RazorpayCheckout'
 import { SubmissionModal, type SubmissionFormValues } from '@/components/participant/SubmissionModal'
 
 export default function HackathonDetailPage() {
@@ -106,25 +106,42 @@ export default function HackathonDetailPage() {
     setActionLoading(false)
   }
 
-  const pollForPaymentOutcome = async (registrationId: string) => {
+  // A payment that is stuck in payment_pending (paid, then the tab was closed, and the
+  // webhook was late) heals itself: the server asks Razorpay what happened to the order.
+  useEffect(() => {
+    if (!registration?.id || registration.status !== 'payment_pending') return
+    let cancelled = false
+    postJson<{ status: string }>(`/api/registrations/${registration.id}/sync-payment`, {}).then((res) => {
+      if (!cancelled && res.success && res.data?.status && res.data.status !== 'payment_pending') loadData()
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [registration?.id, registration?.status])
+
+  const pollForPaymentOutcome = async (registrationId: string, result?: RazorpayCheckoutResult) => {
     setVerifying(true)
-    const timeoutMs = 30000
+    // 1) The server verifies the payment with Razorpay (signature + API fetch) and
+    //    settles the registration itself — no reliance on the webhook alone.
+    if (result) await verifyPaymentOnServer(result)
+    // 2) Poll the server (which also re-checks Razorpay) until the status leaves
+    //    payment_pending; covers 'authorized' -> 'captured' delays and webhook races.
+    const timeoutMs = 60000
     const intervalMs = 2500
     const start = Date.now()
     let resolvedStatus: string | null = null
     while (Date.now() - start < timeoutMs) {
-      await new Promise((resolve) => setTimeout(resolve, intervalMs))
-      const { data } = await supabase.from('registrations').select('status').eq('id', registrationId).single()
-      if (data && data.status !== 'payment_pending') {
-        resolvedStatus = data.status
+      const res = await postJson<{ status: string }>(`/api/registrations/${registrationId}/sync-payment`, {})
+      if (res.success && res.data?.status && res.data.status !== 'payment_pending') {
+        resolvedStatus = res.data.status
         break
       }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs))
     }
     setVerifying(false)
-    // Webhook resolved the payment one way or the other — drop the stale
-    // pay panel so it doesn't linger alongside the new stage's UI (e.g. the
-    // "Create Team" button once approved). Still showing 'payment_pending'
-    // (timeout) keeps the panel up so the participant can retry.
+    // Payment resolved — drop the stale pay panel so it doesn't linger alongside
+    // the new stage's UI (e.g. the "Create Team" button once approved). Still
+    // 'payment_pending' (timeout) keeps the panel up; reopening this page re-checks.
     if (resolvedStatus && resolvedStatus !== 'payment_pending') {
       setShowPayPanel(false)
     }
@@ -147,8 +164,8 @@ export default function HackathonDetailPage() {
       await loadData()
       await openRazorpayCheckout(result.data, {
         email: user?.email,
-        onSuccess: () => {
-          pollForPaymentOutcome(registrationId)
+        onSuccess: (checkoutResult) => {
+          pollForPaymentOutcome(registrationId, checkoutResult)
         },
         onDismiss: () => {},
         onFailure: () => {
@@ -314,8 +331,9 @@ export default function HackathonDetailPage() {
           <div>
             {verifying ? (
               <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-                Verifying your payment… this usually takes a few seconds. Razorpay's confirmation is the only
-                thing that unlocks the next step — no admin action needed.
+                Verifying your payment with Razorpay… this usually takes a few seconds. Once it is confirmed the
+                next step unlocks automatically — no admin action needed. You can safely close this page; if you
+                have paid, reopening it will confirm the payment.
               </p>
             ) : (
               <button
