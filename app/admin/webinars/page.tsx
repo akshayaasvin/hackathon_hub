@@ -201,7 +201,7 @@ export default function AdminWebinarsPage() {
             </div>
             <div className="responsive-grid-2" style={{ marginBottom: '24px' }}>
               <div>
-                <label style={label}>Meeting link (shown &amp; emailed only after payment)</label>
+                <label style={label}>Meeting link (shown only after payment)</label>
                 <input type="url" name="join_url" value={form.join_url} onChange={handleChange} className="premium-input" placeholder="https://meet.google.com/…" />
               </div>
               <div>

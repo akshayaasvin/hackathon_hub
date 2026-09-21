@@ -3,7 +3,6 @@ import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createRazorpayClient } from '@/lib/razorpay'
 import { getOrCreateOrder } from '@/lib/payments/orders'
-import { sendWebinarConfirmation } from '@/lib/payments/settle'
 import { parseQuestions, validateAnswers } from '@/lib/webinarQuestions'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
 
@@ -133,9 +132,6 @@ export async function POST(request: Request) {
       } else {
         registrationId = created.id
         if (fee <= 0) {
-          await sendWebinarConfirmation(admin, registrationId).catch((err) =>
-            console.error('[webinar/register] free confirmation email failed (non-fatal):', err)
-          )
           return apiSuccess(
             { registrationId, accessToken, paymentRequired: false },
             'You are registered for this webinar.'
