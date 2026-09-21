@@ -19,5 +19,11 @@ export const createAdminClient = () => {
 
   return createSupabaseClient(url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    // Next.js 14 stores GET fetch() responses in its Data Cache — even on routes marked
+    // `dynamic = 'force-dynamic'` — and supabase-js reads are plain GET fetches. Without
+    // this, the first answer (e.g. "no webinars yet", or a registration still
+    // 'payment_pending') is served again after the data changes. Payment state must
+    // always be read live, so this client never uses the cache.
+    global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
   })
 }

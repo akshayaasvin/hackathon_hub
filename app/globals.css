@@ -279,6 +279,47 @@ h1, h2, h3, h4, h5, h6 {
 
 .navbar-actions { display: flex; align-items: center; gap: 12px; }
 
+/* ── WEBINAR HIGHLIGHTS (header button, hero pill, home section) ── */
+@keyframes livePulse {
+  0%   { box-shadow: 0 0 0 0 rgba(0, 196, 122, 0.55); }
+  70%  { box-shadow: 0 0 0 7px rgba(0, 196, 122, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 196, 122, 0); }
+}
+.live-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: #00C47A; animation: livePulse 1.8s infinite; flex-shrink: 0;
+}
+.navbar-webinar-link {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: 999px;
+  font-size: 14px; font-weight: 700; text-decoration: none; color: #fff;
+  background: linear-gradient(135deg, #6C47FF 0%, #8B5CF6 100%);
+  box-shadow: 0 6px 16px -6px rgba(108, 71, 255, 0.55);
+  transition: var(--transition-smooth);
+}
+.navbar-webinar-link:hover { transform: translateY(-1px); box-shadow: 0 10px 22px -8px rgba(108, 71, 255, 0.65); }
+.navbar-webinar-link.active { outline: 2px solid rgba(108, 71, 255, 0.35); outline-offset: 2px; }
+
+.webinar-pill {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 9px 18px; border-radius: 999px; margin-bottom: 22px;
+  font-size: 14px; font-weight: 700; text-decoration: none; color: #4C2FCC;
+  background: rgba(108, 71, 255, 0.10); border: 1px solid rgba(108, 71, 255, 0.30);
+  transition: var(--transition-smooth);
+}
+.webinar-pill:hover { background: rgba(108, 71, 255, 0.16); transform: translateY(-1px); }
+
+.webinar-section-card {
+  border-radius: 24px; padding: 36px 28px 20px;
+  background: linear-gradient(135deg, rgba(108,71,255,0.10) 0%, rgba(0,196,122,0.08) 100%);
+  border: 1px solid rgba(108, 71, 255, 0.22);
+}
+.webinar-badge {
+  display: inline-flex; align-items: center; gap: 8px; margin-bottom: 12px;
+  padding: 5px 12px; border-radius: 999px; font-size: 11px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase; color: #fff; background: #6C47FF;
+}
+
 .hamburger-btn { display: none; background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 8px; border-radius: 8px; transition: var(--transition-smooth); }
 .hamburger-btn:hover { background: var(--primary-glow); }
 
@@ -735,6 +776,7 @@ body.body-landing-light {
   .navbar-logo-wordmark { font-size: 16px !important; }
   .navbar-actions { gap: 6px !important; }
   .navbar-actions .btn { padding: 5px 10px !important; font-size: 12px !important; }
-  .navbar-actions .navbar-desktop-link { padding: 6px 6px !important; font-size: 12px !important; }
+  .navbar-actions .navbar-webinar-link { padding: 6px 10px !important; font-size: 12px !important; gap: 6px !important; }
+  .webinar-section-card { padding: 24px 14px 8px !important; }
   .navbar-container { gap: 4px; }
 }
