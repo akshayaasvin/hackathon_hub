@@ -65,47 +65,6 @@ export function applicationReceivedEmailHtml({ fullName }: { fullName: string })
   `
 }
 
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string)
-}
-
-export function webinarConfirmationEmailHtml({
-  fullName,
-  webinarTitle,
-  startsAt,
-  joinUrl,
-  paymentId,
-  amount,
-}: {
-  fullName: string
-  webinarTitle: string
-  startsAt: string | null
-  joinUrl: string | null
-  paymentId: string | null
-  amount: number | null
-}) {
-  const when = startsAt
-    ? new Date(startsAt).toLocaleString('en-IN', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Asia/Kolkata' }) + ' IST'
-    : null
-  return `
-    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2>You're registered, ${escapeHtml(fullName)}!</h2>
-      <p>Your spot in <b>${escapeHtml(webinarTitle)}</b> is confirmed.</p>
-      <table style="border-collapse: collapse; margin: 16px 0;">
-        ${when ? `<tr><td style="padding: 4px 12px 4px 0;"><b>When</b></td><td>${escapeHtml(when)}</td></tr>` : ''}
-        ${amount ? `<tr><td style="padding: 4px 12px 4px 0;"><b>Amount paid</b></td><td>₹${amount}</td></tr>` : ''}
-        ${paymentId ? `<tr><td style="padding: 4px 12px 4px 0;"><b>Payment ID</b></td><td>${escapeHtml(paymentId)}</td></tr>` : ''}
-      </table>
-      ${
-        joinUrl
-          ? `<p><a href="${escapeHtml(joinUrl)}" style="display:inline-block;background:#6C47FF;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Join the webinar</a></p>
-             <p style="font-size:13px;color:#475569;">Or copy this link into your browser:<br><a href="${escapeHtml(joinUrl)}" style="color:#6C47FF;word-break:break-all;">${escapeHtml(joinUrl)}</a></p>`
-          : '<p>The joining link will be shared with you before the session.</p>'
-      }
-    </div>
-  `
-}
-
 export function changesRequestedEmailHtml({ fullName, notes }: { fullName: string; notes: string }) {
   return `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">

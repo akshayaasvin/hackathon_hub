@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { postJson } from '@/lib/apiFetch'
-import { Download, Mail, TriangleAlert, Users } from 'lucide-react'
+import { Download, TriangleAlert, Users } from 'lucide-react'
 import type { StoredAnswer } from '@/lib/webinarQuestions'
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
@@ -31,7 +30,6 @@ export default function AdminWebinarRegistrationsPage() {
   const [webinarFilter, setWebinarFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
-  const [emailingId, setEmailingId] = useState<string | null>(null)
 
   useEffect(() => {
     ;(async () => {
@@ -68,13 +66,6 @@ export default function AdminWebinarRegistrationsPage() {
           (r.payment_id || '').toLowerCase().includes(q))
     )
   }, [rows, webinarFilter, statusFilter, search])
-
-  const resendEmail = async (id: string) => {
-    setEmailingId(id)
-    const res = await postJson(`/api/admin/webinar-registrations/${id}/resend`, {})
-    setEmailingId(null)
-    alert(res.message)
-  }
 
   const exportCsv = () => {
     // One extra column per distinct question label found in the exported rows.
@@ -174,13 +165,12 @@ export default function AdminWebinarRegistrationsPage() {
               <th>Payment ID</th>
               <th>Answers</th>
               <th>Registered</th>
-              <th>Email</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
                   No registrations match.
                 </td>
               </tr>
@@ -211,21 +201,6 @@ export default function AdminWebinarRegistrationsPage() {
                           ))}
                     </td>
                     <td>{new Date(r.created_at).toLocaleString()}</td>
-                    <td>
-                      {r.status === 'paid' || r.status === 'free' ? (
-                        <button
-                          onClick={() => resendEmail(r.id)}
-                          disabled={emailingId === r.id}
-                          className="btn btn-secondary"
-                          style={{ padding: '6px 10px', fontSize: '12px', display: 'inline-flex', gap: '6px' }}
-                          title="Re-send the confirmation email with the meeting link"
-                        >
-                          <Mail size={13} /> {emailingId === r.id ? 'Sending…' : 'Resend'}
-                        </button>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
                   </tr>
                 )
               })

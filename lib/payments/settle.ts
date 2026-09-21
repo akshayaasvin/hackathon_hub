@@ -1,7 +1,6 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type Razorpay from 'razorpay'
-import { sendEmail, webinarConfirmationEmailHtml } from '@/lib/email'
 import type { PaymentKind } from './orders'
 
 /**
@@ -101,13 +100,6 @@ export async function settlePayment(admin: SupabaseClient, payment: RazorpayPaym
     .neq('status', 'paid')
   if (ledgerError) throw ledgerError
 
-  if (outcome === 'settled' && kind === 'webinar') {
-    // Only the call that actually performed the transition sends the email.
-    await sendWebinarConfirmation(admin, targetId).catch((err) =>
-      console.error('[payments] webinar confirmation email failed (non-fatal):', err)
-    )
-  }
-
   return { outcome, ...base }
 }
 
@@ -176,35 +168,6 @@ async function settleWebinar(
     .maybeSingle()
   if (currentError) throw currentError
   return current?.payment_id === paymentId ? 'already_settled' : 'needs_review'
-}
-
-/** Emails the confirmation (with join link when set). Never throws to callers that .catch it. */
-export async function sendWebinarConfirmation(admin: SupabaseClient, webinarRegistrationId: string) {
-  const { data, error } = await admin
-    .from('webinar_registrations')
-    .select('full_name, email, amount, payment_id, webinar:webinars(title, starts_at, join_url)')
-    .eq('id', webinarRegistrationId)
-    .maybeSingle()
-  if (error) throw error
-  if (!data) return
-  const webinar: any = Array.isArray((data as any).webinar) ? (data as any).webinar[0] : (data as any).webinar
-  if (!webinar) return
-  const result: any = await sendEmail({
-    to: data.email,
-    subject: `You're registered: ${webinar.title}`,
-    html: webinarConfirmationEmailHtml({
-      fullName: data.full_name,
-      webinarTitle: webinar.title,
-      startsAt: webinar.starts_at,
-      joinUrl: webinar.join_url,
-      paymentId: data.payment_id,
-      amount: data.amount != null ? Number(data.amount) : null,
-    }),
-  })
-  // sendEmail reports problems in its return value instead of throwing; surface them so the
-  // callers' logs (and the admin "Resend" button) show WHY an email did not go out.
-  if (result?.skipped) throw new Error('Email is not configured (RESEND_API_KEY is missing).')
-  if (result?.error) throw new Error(result.error.message || 'The email provider rejected the message.')
 }
 
 /**

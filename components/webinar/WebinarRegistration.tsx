@@ -67,6 +67,28 @@ async function fetchStatus(registrationId: string, token: string): Promise<Confi
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// The meeting link is not emailed, so remember the registration in THIS browser: reopening
+// /webinar later shows the confirmation (with Copy / Join) again instead of an empty form.
+const STORAGE_KEY = 'webinar_registration_v1'
+const saveRegistration = (value: { registrationId: string; token: string }) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(value))
+  } catch {}
+}
+const clearRegistration = () => {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch {}
+}
+const loadRegistration = (): { registrationId: string; token: string } | null => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
+    return parsed?.registrationId && parsed?.token ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 const labelStyle = { display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' } as const
 
 export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] }) {
@@ -102,6 +124,24 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
       const { data } = await supabase.from('users').select('full_name').eq('id', user.id).maybeSingle()
       if (data?.full_name) setFullName((current) => current || data.full_name)
     })
+  }, [])
+
+  // Reopening the page in the same browser after registering: show the confirmation again.
+  useEffect(() => {
+    const saved = loadRegistration()
+    if (!saved) return
+    let cancelled = false
+    fetchStatus(saved.registrationId, saved.token).then((status) => {
+      if (cancelled) return
+      if (!status) return clearRegistration() // stale / unknown registration
+      if (status.status === 'paid' || status.status === 'free') {
+        setConfirmed(status)
+        setPhase('done')
+      }
+    })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const setAnswer = (id: string, value: AnswerValue) => setAnswers((prev) => ({ ...prev, [id]: value }))
@@ -164,6 +204,7 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
     }
 
     const { registrationId, accessToken, paymentRequired, order } = res.data
+    saveRegistration({ registrationId, token: accessToken })
 
     if (!paymentRequired || !order) {
       // Free webinar: already confirmed server-side; just fetch the confirmation details.
@@ -310,9 +351,9 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
       <div className="glass-card" role="status" style={{ padding: '36px 24px', borderLeft: '4px solid var(--warning)' }}>
         <h3 style={{ marginBottom: '8px' }}>We have your payment — confirmation is taking longer than usual</h3>
         <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.7, marginBottom: '14px' }}>
-          Your payment went through and will be confirmed automatically. You&apos;ll receive an email at{' '}
-          <strong>{email}</strong> as soon as it is. Keep this Payment ID for reference:{' '}
-          <span style={{ fontFamily: 'monospace' }}>{pendingPaymentId}</span>
+          Your payment went through and will be confirmed automatically. Press <strong>Check again</strong> in a minute, or
+          reopen this page in this browser — your meeting link will appear here once it is confirmed. Keep this Payment ID for
+          reference: <span style={{ fontFamily: 'monospace' }}>{pendingPaymentId}</span>
         </p>
         <button
           className="btn btn-primary"
@@ -339,11 +380,9 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
         </div>
         <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: '16px' }}>
           Thanks, {confirmed.fullName}. Your spot in <strong>{confirmed.webinar?.title}</strong> is confirmed.
-          {joinUrl ? (
-            <> We&apos;re also emailing the meeting link to <strong>{email}</strong> — check your spam folder if it doesn&apos;t arrive.</>
-          ) : (
-            <> We&apos;ll email the meeting link to <strong>{email}</strong> before the session.</>
-          )}
+          {joinUrl
+            ? ' Copy the meeting link below or join directly. If you log in with this email, the link is also on your dashboard.'
+            : ' The meeting link will appear here (and on your dashboard) once the organizers add it — reopen this page later.'}
         </p>
         <div style={{ display: 'grid', gap: '8px', fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
           {when && (
@@ -376,6 +415,18 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
             </div>
           </div>
         )}
+        <button
+          type="button"
+          onClick={() => {
+            clearRegistration()
+            setConfirmed(null)
+            setAnswers({})
+            setPhase('form')
+          }}
+          style={{ marginTop: '20px', background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, fontSize: '13px', cursor: 'pointer', padding: 0 }}
+        >
+          Register another person
+        </button>
       </div>
     )
   }
@@ -446,7 +497,7 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
               {busy ? 'Please wait…' : selected.fee > 0 ? `Pay ${money(selected.fee, selected.currency)} & Register` : 'Register for free'}
             </button>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '12px' }}>
-              {selected.fee > 0 ? 'Secure payment by Razorpay. ' : ''}The meeting link is shown here and emailed after registration.
+              {selected.fee > 0 ? 'Secure payment by Razorpay. ' : ''}Your meeting link is shown here right after registration.
             </p>
           </form>
         </div>
