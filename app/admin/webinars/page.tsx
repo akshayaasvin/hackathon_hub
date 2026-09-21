@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { postJson } from '@/lib/apiFetch'
 import { Plus, RefreshCw, Video } from 'lucide-react'
+import QuestionBuilder from '@/components/webinar/QuestionBuilder'
+import { draftsToQuestions, parseQuestions, toDraft, type DraftQuestion } from '@/lib/webinarQuestions'
 
 const emptyForm = {
   title: '',
@@ -38,6 +40,7 @@ export default function AdminWebinarsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm)
+  const [drafts, setDrafts] = useState<DraftQuestion[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -73,6 +76,7 @@ export default function AdminWebinarsPage() {
   const openCreate = () => {
     setEditingId(null)
     setForm(emptyForm)
+    setDrafts([])
     setShowForm(true)
   }
 
@@ -86,12 +90,18 @@ export default function AdminWebinarsPage() {
       fee: w.fee != null ? String(w.fee) : '',
       status: w.status,
     })
+    setDrafts(parseQuestions(w.questions).map(toDraft))
     setShowForm(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const built = draftsToQuestions(drafts)
+    if (built.ok === false) {
+      alert(built.message)
+      return
+    }
     setSaving(true)
     const payload = {
       title: form.title.trim(),
@@ -100,6 +110,7 @@ export default function AdminWebinarsPage() {
       join_url: form.join_url.trim() || null,
       fee: form.fee ? Number(form.fee) : 0,
       status: form.status,
+      questions: built.questions,
       updated_at: new Date().toISOString(),
     }
     const { error } = editingId
@@ -190,7 +201,7 @@ export default function AdminWebinarsPage() {
             </div>
             <div className="responsive-grid-2" style={{ marginBottom: '24px' }}>
               <div>
-                <label style={label}>Join link (shown only after payment)</label>
+                <label style={label}>Meeting link (shown &amp; emailed only after payment)</label>
                 <input type="url" name="join_url" value={form.join_url} onChange={handleChange} className="premium-input" placeholder="https://meet.google.com/…" />
               </div>
               <div>
@@ -202,6 +213,8 @@ export default function AdminWebinarsPage() {
                 </select>
               </div>
             </div>
+            <QuestionBuilder value={drafts} onChange={setDrafts} />
+
             <div style={{ display: 'flex', gap: '12px' }}>
               <button type="submit" disabled={saving} className="btn btn-primary">
                 {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Create Webinar'}

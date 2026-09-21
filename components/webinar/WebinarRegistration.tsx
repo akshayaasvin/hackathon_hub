@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, CheckCircle2, Loader2, Video } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { postJson } from '@/lib/apiFetch'
@@ -10,6 +10,8 @@ import {
   type RazorpayCheckoutResult,
   type RazorpayOrder,
 } from '@/components/RazorpayCheckout'
+import CopyLinkButton from '@/components/webinar/CopyLinkButton'
+import { YEAR_MAX, type AnswerValue, type WebinarQuestion } from '@/lib/webinarQuestions'
 
 export interface PublicWebinar {
   id: string
@@ -18,6 +20,7 @@ export interface PublicWebinar {
   startsAt: string | null
   fee: number
   currency: string
+  questions: WebinarQuestion[]
 }
 
 interface RegisterData {
@@ -64,11 +67,14 @@ async function fetchStatus(registrationId: string, token: string): Promise<Confi
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+const labelStyle = { display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' } as const
+
 export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] }) {
   const [selectedId, setSelectedId] = useState<string>(webinars.length === 1 ? webinars[0].id : '')
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>({})
   const [phase, setPhase] = useState<Phase>('form')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -78,6 +84,14 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
   const [resume, setResume] = useState<{ registrationId: string; token: string } | null>(null)
 
   const selected = webinars.find((w) => w.id === selectedId) || null
+
+  // Year dropdown: next 10 years back to 1970 (the server accepts 1950–2100).
+  const years = useMemo(() => {
+    const now = new Date().getFullYear()
+    const list: number[] = []
+    for (let y = Math.min(now + 10, YEAR_MAX); y >= 1970; y--) list.push(y)
+    return list
+  }, [])
 
   // Signed-in participants get their details pre-filled (they can still edit them).
   useEffect(() => {
@@ -89,6 +103,13 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
       if (data?.full_name) setFullName((current) => current || data.full_name)
     })
   }, [])
+
+  const setAnswer = (id: string, value: AnswerValue) => setAnswers((prev) => ({ ...prev, [id]: value }))
+
+  const toggleCheckbox = (id: string, option: string) => {
+    const current = Array.isArray(answers[id]) ? (answers[id] as string[]) : []
+    setAnswer(id, current.includes(option) ? current.filter((o) => o !== option) : [...current, option])
+  }
 
   // Waits (up to ~60s) for the server to report the registration as confirmed. The server
   // itself re-checks Razorpay on every poll, so this works even if the webhook is late.
@@ -119,13 +140,22 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
     if (!selected || busy) return
     setError(null)
     setNotice(null)
-    setBusy(true)
 
+    // Checkbox groups can't use the browser's `required`; check them here (the server re-checks everything).
+    for (const q of selected.questions) {
+      if (q.type === 'checkbox' && q.required && !(Array.isArray(answers[q.id]) && (answers[q.id] as string[]).length > 0)) {
+        setError(`Please choose at least one option for "${q.label}".`)
+        return
+      }
+    }
+
+    setBusy(true)
     const res = await postJson<RegisterData>('/api/webinar/register', {
       webinarId: selected.id,
       fullName,
       email,
       phone,
+      answers,
     })
     if (!res.success || !res.data) {
       setError(res.message)
@@ -172,6 +202,96 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
     }
   }
 
+  const renderQuestion = (q: WebinarQuestion) => {
+    const id = `wbq-${q.id}`
+    const value = answers[q.id]
+    const asText = typeof value === 'string' ? value : ''
+    const star = q.required ? <span style={{ color: 'var(--danger)' }}> *</span> : null
+
+    switch (q.type) {
+      case 'paragraph':
+        return (
+          <div key={q.id} style={{ marginBottom: '16px' }}>
+            <label htmlFor={id} style={labelStyle}>{q.label}{star}</label>
+            <textarea id={id} className="premium-input" rows={3} maxLength={2000} required={q.required} value={asText} onChange={(e) => setAnswer(q.id, e.target.value)} />
+          </div>
+        )
+      case 'radio':
+        return (
+          <fieldset key={q.id} style={{ border: 'none', padding: 0, margin: '0 0 16px' }}>
+            <legend style={labelStyle}>{q.label}{star}</legend>
+            <div style={{ display: 'grid', gap: '8px' }}>
+              {q.options?.map((o) => (
+                <label key={o} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', cursor: 'pointer' }}>
+                  <input type="radio" name={id} value={o} required={q.required} checked={value === o} onChange={() => setAnswer(q.id, o)} />
+                  {o}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )
+      case 'checkbox':
+        return (
+          <fieldset key={q.id} style={{ border: 'none', padding: 0, margin: '0 0 16px' }}>
+            <legend style={labelStyle}>{q.label}{star}</legend>
+            <div style={{ display: 'grid', gap: '8px' }}>
+              {q.options?.map((o) => (
+                <label key={o} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={Array.isArray(value) && value.includes(o)} onChange={() => toggleCheckbox(q.id, o)} />
+                  {o}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )
+      case 'dropdown':
+        return (
+          <div key={q.id} style={{ marginBottom: '16px' }}>
+            <label htmlFor={id} style={labelStyle}>{q.label}{star}</label>
+            <select id={id} className="premium-input" required={q.required} value={asText} onChange={(e) => setAnswer(q.id, e.target.value)}>
+              <option value="">Select…</option>
+              {q.options?.map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
+          </div>
+        )
+      case 'year':
+        return (
+          <div key={q.id} style={{ marginBottom: '16px' }}>
+            <label htmlFor={id} style={labelStyle}>{q.label}{star}</label>
+            <select id={id} className="premium-input" required={q.required} value={asText} onChange={(e) => setAnswer(q.id, e.target.value)}>
+              <option value="">Select year…</option>
+              {years.map((y) => (
+                <option key={y} value={String(y)}>{y}</option>
+              ))}
+            </select>
+          </div>
+        )
+      case 'date':
+        return (
+          <div key={q.id} style={{ marginBottom: '16px' }}>
+            <label htmlFor={id} style={labelStyle}>{q.label}{star}</label>
+            <input id={id} type="date" className="premium-input" required={q.required} min="1900-01-01" max={`${YEAR_MAX}-12-31`} value={asText} onChange={(e) => setAnswer(q.id, e.target.value)} />
+          </div>
+        )
+      case 'number':
+        return (
+          <div key={q.id} style={{ marginBottom: '16px' }}>
+            <label htmlFor={id} style={labelStyle}>{q.label}{star}</label>
+            <input id={id} type="number" step="any" className="premium-input" required={q.required} value={asText} onChange={(e) => setAnswer(q.id, e.target.value)} />
+          </div>
+        )
+      default:
+        return (
+          <div key={q.id} style={{ marginBottom: '16px' }}>
+            <label htmlFor={id} style={labelStyle}>{q.label}{star}</label>
+            <input id={id} type="text" className="premium-input" maxLength={300} required={q.required} value={asText} onChange={(e) => setAnswer(q.id, e.target.value)} />
+          </div>
+        )
+    }
+  }
+
   if (phase === 'confirming') {
     return (
       <div className="glass-card" role="status" style={{ textAlign: 'center', padding: '48px 24px' }}>
@@ -210,6 +330,7 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
 
   if (phase === 'done' && confirmed) {
     const when = formatWhen(confirmed.webinar?.startsAt ?? null)
+    const joinUrl = confirmed.webinar?.joinUrl ?? null
     return (
       <div className="glass-card" role="status" style={{ padding: '36px 24px', borderLeft: '4px solid var(--success)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', color: 'var(--success)' }}>
@@ -217,8 +338,12 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
           <h2 style={{ fontSize: '24px', margin: 0 }}>You&apos;re registered!</h2>
         </div>
         <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: '16px' }}>
-          Thanks, {confirmed.fullName}. Your spot in <strong>{confirmed.webinar?.title}</strong> is confirmed. A confirmation has
-          been emailed to <strong>{email}</strong>.
+          Thanks, {confirmed.fullName}. Your spot in <strong>{confirmed.webinar?.title}</strong> is confirmed.
+          {joinUrl ? (
+            <> We&apos;re also emailing the meeting link to <strong>{email}</strong> — check your spam folder if it doesn&apos;t arrive.</>
+          ) : (
+            <> We&apos;ll email the meeting link to <strong>{email}</strong> before the session.</>
+          )}
         </p>
         <div style={{ display: 'grid', gap: '8px', fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
           {when && (
@@ -232,10 +357,24 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
             </span>
           )}
         </div>
-        {confirmed.webinar?.joinUrl && (
-          <a href={confirmed.webinar.joinUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ display: 'inline-flex', gap: '8px' }}>
-            <Video size={16} /> Join the webinar
-          </a>
+        {joinUrl && (
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Meeting link</div>
+            <div
+              style={{
+                fontFamily: 'monospace', fontSize: '13px', padding: '10px 12px', borderRadius: '10px', marginBottom: '12px',
+                background: 'rgba(108,71,255,0.06)', border: '1px solid var(--border-color)', wordBreak: 'break-all',
+              }}
+            >
+              {joinUrl}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <a href={joinUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ display: 'inline-flex', gap: '8px' }}>
+                <Video size={16} /> Join the webinar
+              </a>
+              <CopyLinkButton url={joinUrl} />
+            </div>
+          </div>
         )}
       </div>
     )
@@ -251,7 +390,10 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
               <button
                 key={w.id}
                 type="button"
-                onClick={() => setSelectedId(w.id)}
+                onClick={() => {
+                  setSelectedId(w.id)
+                  setAnswers({})
+                }}
                 className="glass-card"
                 aria-pressed={active}
                 style={{
@@ -286,29 +428,25 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
             )}
 
             <div style={{ marginBottom: '16px' }}>
-              <label htmlFor="wb-name" style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>
-                Full name
-              </label>
+              <label htmlFor="wb-name" style={labelStyle}>Full name <span style={{ color: 'var(--danger)' }}>*</span></label>
               <input id="wb-name" className="premium-input" value={fullName} onChange={(e) => setFullName(e.target.value)} required minLength={2} maxLength={100} autoComplete="name" />
             </div>
             <div style={{ marginBottom: '16px' }}>
-              <label htmlFor="wb-email" style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>
-                Email
-              </label>
+              <label htmlFor="wb-email" style={labelStyle}>Email <span style={{ color: 'var(--danger)' }}>*</span></label>
               <input id="wb-email" type="email" className="premium-input" value={email} onChange={(e) => setEmail(e.target.value)} required maxLength={254} autoComplete="email" />
             </div>
-            <div style={{ marginBottom: '24px' }}>
-              <label htmlFor="wb-phone" style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>
-                WhatsApp / mobile number
-              </label>
+            <div style={{ marginBottom: '16px' }}>
+              <label htmlFor="wb-phone" style={labelStyle}>WhatsApp / mobile number <span style={{ color: 'var(--danger)' }}>*</span></label>
               <input id="wb-phone" type="tel" inputMode="numeric" className="premium-input" value={phone} onChange={(e) => setPhone(e.target.value)} required maxLength={20} autoComplete="tel" placeholder="10-digit mobile number" />
             </div>
 
-            <button type="submit" disabled={busy} className="btn btn-primary" style={{ width: '100%', padding: '14px' }}>
+            {selected.questions.map(renderQuestion)}
+
+            <button type="submit" disabled={busy} className="btn btn-primary" style={{ width: '100%', padding: '14px', marginTop: '8px' }}>
               {busy ? 'Please wait…' : selected.fee > 0 ? `Pay ${money(selected.fee, selected.currency)} & Register` : 'Register for free'}
             </button>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '12px' }}>
-              {selected.fee > 0 ? 'Secure payment by Razorpay. ' : ''}Your registration is confirmed by email.
+              {selected.fee > 0 ? 'Secure payment by Razorpay. ' : ''}The meeting link is shown here and emailed after registration.
             </p>
           </form>
         </div>

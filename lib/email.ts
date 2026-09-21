@@ -98,7 +98,8 @@ export function webinarConfirmationEmailHtml({
       </table>
       ${
         joinUrl
-          ? `<p><a href="${escapeHtml(joinUrl)}" style="display:inline-block;background:#6C47FF;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Join the webinar</a></p>`
+          ? `<p><a href="${escapeHtml(joinUrl)}" style="display:inline-block;background:#6C47FF;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Join the webinar</a></p>
+             <p style="font-size:13px;color:#475569;">Or copy this link into your browser:<br><a href="${escapeHtml(joinUrl)}" style="color:#6C47FF;word-break:break-all;">${escapeHtml(joinUrl)}</a></p>`
           : '<p>The joining link will be shared with you before the session.</p>'
       }
     </div>

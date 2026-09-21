@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Download, TriangleAlert, Users } from 'lucide-react'
+import { postJson } from '@/lib/apiFetch'
+import { Download, Mail, TriangleAlert, Users } from 'lucide-react'
+import type { StoredAnswer } from '@/lib/webinarQuestions'
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
   paid: { bg: 'rgba(16, 185, 129, 0.15)', color: 'var(--success)', label: 'PAID' },
@@ -18,6 +20,8 @@ function csvCell(value: unknown): string {
   return s
 }
 
+const answerText = (a: StoredAnswer) => (Array.isArray(a.value) ? a.value.join('; ') : a.value)
+
 export default function AdminWebinarRegistrationsPage() {
   const supabase = createClient()
   const [rows, setRows] = useState<any[]>([])
@@ -27,6 +31,7 @@ export default function AdminWebinarRegistrationsPage() {
   const [webinarFilter, setWebinarFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
+  const [emailingId, setEmailingId] = useState<string | null>(null)
 
   useEffect(() => {
     ;(async () => {
@@ -64,14 +69,32 @@ export default function AdminWebinarRegistrationsPage() {
     )
   }, [rows, webinarFilter, statusFilter, search])
 
+  const resendEmail = async (id: string) => {
+    setEmailingId(id)
+    const res = await postJson(`/api/admin/webinar-registrations/${id}/resend`, {})
+    setEmailingId(null)
+    alert(res.message)
+  }
+
   const exportCsv = () => {
-    const header = ['Webinar', 'Name', 'Email', 'Phone', 'Status', 'Amount', 'Payment ID', 'Registered at', 'Paid at']
+    // One extra column per distinct question label found in the exported rows.
+    const questionLabels: string[] = []
+    filtered.forEach((r) =>
+      ((r.answers as StoredAnswer[]) || []).forEach((a) => {
+        if (!questionLabels.includes(a.label)) questionLabels.push(a.label)
+      })
+    )
+    const header = ['Webinar', 'Name', 'Email', 'Phone', 'Status', 'Amount', 'Payment ID', 'Registered at', 'Paid at', ...questionLabels]
     const lines = [header.map(csvCell).join(',')].concat(
-      filtered.map((r) =>
-        [titleOf(r.webinar_id), r.full_name, r.email, r.phone, r.status, r.amount ?? '', r.payment_id ?? '', r.created_at, r.paid_at ?? '']
+      filtered.map((r) => {
+        const byLabel = new Map<string, string>(((r.answers as StoredAnswer[]) || []).map((a) => [a.label, answerText(a)]))
+        return [
+          titleOf(r.webinar_id), r.full_name, r.email, r.phone, r.status, r.amount ?? '', r.payment_id ?? '', r.created_at, r.paid_at ?? '',
+          ...questionLabels.map((l) => byLabel.get(l) ?? ''),
+        ]
           .map(csvCell)
           .join(',')
-      )
+      })
     )
     const blob = new Blob(['﻿' + lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -149,19 +172,22 @@ export default function AdminWebinarRegistrationsPage() {
               <th>Status</th>
               <th>Amount</th>
               <th>Payment ID</th>
+              <th>Answers</th>
               <th>Registered</th>
+              <th>Email</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
                   No registrations match.
                 </td>
               </tr>
             ) : (
               filtered.map((r) => {
                 const s = STATUS_STYLE[r.status] || STATUS_STYLE.payment_pending
+                const answers: StoredAnswer[] = Array.isArray(r.answers) ? r.answers : []
                 return (
                   <tr key={r.id}>
                     <td>
@@ -175,7 +201,31 @@ export default function AdminWebinarRegistrationsPage() {
                     </td>
                     <td>{r.amount != null && Number(r.amount) > 0 ? `₹${r.amount}` : '-'}</td>
                     <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>{r.payment_id || '-'}</td>
+                    <td style={{ minWidth: '200px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      {answers.length === 0
+                        ? '-'
+                        : answers.map((a) => (
+                            <div key={a.id}>
+                              <strong>{a.label}:</strong> {answerText(a)}
+                            </div>
+                          ))}
+                    </td>
                     <td>{new Date(r.created_at).toLocaleString()}</td>
+                    <td>
+                      {r.status === 'paid' || r.status === 'free' ? (
+                        <button
+                          onClick={() => resendEmail(r.id)}
+                          disabled={emailingId === r.id}
+                          className="btn btn-secondary"
+                          style={{ padding: '6px 10px', fontSize: '12px', display: 'inline-flex', gap: '6px' }}
+                          title="Re-send the confirmation email with the meeting link"
+                        >
+                          <Mail size={13} /> {emailingId === r.id ? 'Sending…' : 'Resend'}
+                        </button>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
                   </tr>
                 )
               })

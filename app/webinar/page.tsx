@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { WebinarRegistration, type PublicWebinar } from '@/components/webinar/WebinarRegistration'
+import { parseQuestions } from '@/lib/webinarQuestions'
 
 // Public page: https://hackathon.adz4needz.com/webinar
 // A real App Router route, so opening or refreshing /webinar directly never 404s.
@@ -20,7 +21,7 @@ export default async function WebinarPage() {
     const admin = createAdminClient()
     const { data, error } = await admin
       .from('webinars')
-      .select('id, title, description, starts_at, fee, currency')
+      .select('id, title, description, starts_at, fee, currency, questions')
       .eq('status', 'published')
       .order('starts_at', { ascending: true, nullsFirst: false })
     if (error) throw error
@@ -31,6 +32,7 @@ export default async function WebinarPage() {
       startsAt: w.starts_at,
       fee: Number(w.fee),
       currency: w.currency || 'INR',
+      questions: parseQuestions(w.questions),
     }))
   } catch (err) {
     console.error('[webinar page] could not load webinars:', err)

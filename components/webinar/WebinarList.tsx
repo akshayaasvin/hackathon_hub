@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { ArrowUpRight, CalendarDays, CheckCircle2, Video } from 'lucide-react'
+import CopyLinkButton from '@/components/webinar/CopyLinkButton'
 
 interface ListedWebinar {
   id: string
@@ -93,9 +94,12 @@ export default function WebinarList({ variant }: { variant: 'landing' | 'dashboa
                   <CheckCircle2 size={16} /> You&apos;re registered
                 </span>
                 {w.joinUrl && (
-                  <a href={w.joinUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px', display: 'inline-flex', gap: '6px' }}>
-                    <Video size={14} /> Join
-                  </a>
+                  <span style={{ display: 'inline-flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <a href={w.joinUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px', display: 'inline-flex', gap: '6px' }}>
+                      <Video size={14} /> Join
+                    </a>
+                    <CopyLinkButton url={w.joinUrl} small />
+                  </span>
                 )}
               </div>
             ) : (
