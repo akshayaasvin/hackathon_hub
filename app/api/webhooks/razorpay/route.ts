@@ -1,31 +1,31 @@
-import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
+import { verifyWebhookSignature } from '@/lib/razorpay'
+import { settlePayment, markAttemptFailed, logPaymentEvent } from '@/lib/payments/settle'
 
-// Razorpay webhook, source of truth for the real Orders API + Checkout.js
-// flow (app/api/registrations/[id]/create-order):
+// ONE Razorpay webhook for the whole app (Hackathon + Webinar):
 //
-//   payment.captured (signature verified) -> registrations.status = 'approved'
-//     directly — a verified webhook is stronger proof of payment than the
-//     old manual "paste your reference" self-report ever was, so this skips
-//     the payment_submitted manual-review step entirely.
-//   payment.failed -> registrations.status = 'rejected', same "Retry" UI
-//     path the student already sees for an admin-rejected payment.
-//   order.paid -> not applicable to the Orders API + Checkout.js flow (only
-//     fires for Payment Links, which this app no longer uses); ignored.
+//   https://hackathon.adz4needz.com/api/webhooks/razorpay
+//   events: payment.captured, order.paid, payment.failed
+//   secret: RAZORPAY_WEBHOOK_SECRET
 //
-// Requires two things configured in your Razorpay dashboard for this to
-// ever fire (neither can be set up from here — they're on your Razorpay
-// account):
-//   1. A webhook pointing at https://<your-domain>/api/webhooks/razorpay,
-//      subscribed to "payment.captured" and "payment.failed".
-//   2. RAZORPAY_WEBHOOK_SECRET env var set to the signing secret Razorpay
-//      shows you when you create that webhook.
+// Why one endpoint and not one per product: Razorpay delivers every event of the
+// ACCOUNT to every webhook URL, so two endpoints would just both receive both
+// products' events and each ignore half. Classification does not need a second
+// URL — settlePayment() looks the Razorpay order id up in our own `payment_orders`
+// ledger, whose `kind` column says 'hackathon' or 'webinar'. That is a
+// server-side identifier the browser can't forge (unlike payment notes).
 //
-// Every DB write below is checked and logged, and returns a 5xx on failure
-// (not 2xx) specifically so Razorpay's webhook retry policy kicks in
-// instead of the event being silently dropped — a registration that fails
-// to update here must stay 'payment_pending', never look "handled".
+// Reliability rules implemented here:
+//   * signature is checked against the RAW body before anything is parsed;
+//   * a redelivered event (same x-razorpay-event-id) that we already fully
+//     processed is acknowledged without touching anything;
+//   * the event is recorded only AFTER it was processed, so a crash mid-way
+//     leaves it unrecorded and Razorpay's retry runs it again;
+//   * events for orders that aren't ours (other sites on the same Razorpay
+//     account) get 200 so Razorpay does not retry them for days;
+//   * a DB failure returns 5xx so Razorpay DOES retry;
+//   * payment.failed never changes a registration (see markAttemptFailed).
 export async function POST(request: Request) {
   try {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET
@@ -38,111 +38,75 @@ export async function POST(request: Request) {
     const signature = request.headers.get('x-razorpay-signature')
     if (!signature) return apiError('Missing signature.', 400)
 
-    const expectedSignature = crypto.createHmac('sha256', secret).update(rawBody).digest('hex')
-    const validSignature =
-      signature.length === expectedSignature.length &&
-      crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))
-
-    if (!validSignature) {
+    if (!verifyWebhookSignature(rawBody, signature, secret)) {
       console.error('[razorpay webhook] signature mismatch')
       return apiError('Invalid signature.', 401)
     }
 
-    const payload = JSON.parse(rawBody)
-    const event = payload?.event
-    const paymentEntity = payload?.payload?.payment?.entity
-    const registrationId: string | undefined =
-      paymentEntity?.notes?.registration_id || payload?.payload?.payment_link?.entity?.reference_id
-    const orderId: string | undefined = paymentEntity?.order_id
-
-    if (!registrationId) {
-      console.warn('[razorpay webhook] no registration_id in payload, event:', event)
-      return apiSuccess({ ignored: true }, 'No registration reference in payload.')
+    let payload: any
+    try {
+      payload = JSON.parse(rawBody)
+    } catch {
+      return apiError('Invalid JSON.', 400)
     }
+
+    const event: string | undefined = payload?.event
+    const eventId = request.headers.get('x-razorpay-event-id')
+    const payment = payload?.payload?.payment?.entity
+    const orderId: string | undefined = payment?.order_id ?? undefined
 
     const admin = createAdminClient()
 
-    if (event === 'payment.captured' || event === 'payment_link.paid') {
-      const { data: registration } = await admin
-        .from('registrations')
-        .select('id, status')
-        .eq('id', registrationId)
-        .single()
-
-      if (!registration) {
-        console.warn('[razorpay webhook] registration not found:', registrationId)
-        return apiSuccess({ ignored: true }, 'Registration not found.')
-      }
-      if (registration.status !== 'payment_pending') {
-        return apiSuccess({ ignored: true }, `Registration already "${registration.status}".`)
-      }
-
-      const { error: approveError } = await admin
-        .from('registrations')
-        .update({
-          status: 'approved',
-          payment_method: 'razorpay',
-          payment_amount: paymentEntity?.amount ? paymentEntity.amount / 100 : null,
-          payment_reference: paymentEntity?.id || null,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq('id', registrationId)
-
-      if (approveError) {
-        // Registration stays 'payment_pending' — return non-2xx so Razorpay
-        // retries this webhook instead of treating it as delivered.
-        console.error('[razorpay webhook] registrations approve update failed:', registrationId, approveError)
-        return apiError('Failed to update registration.', 500)
-      }
-
-      if (orderId) {
-        const { error: orderError } = await admin
-          .from('payment_orders')
-          .update({
-            status: 'paid',
-            razorpay_payment_id: paymentEntity?.id || null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('razorpay_order_id', orderId)
-        if (orderError) {
-          // Registration is already approved (source of truth) — this is
-          // only the audit trail, so log and continue rather than fail the
-          // whole webhook and trigger a pointless retry.
-          console.error('[razorpay webhook] payment_orders update failed:', orderId, orderError)
-        }
-      }
-
-      return apiSuccess({ status: 'approved' }, 'Payment verified — registration approved.')
+    if (eventId) {
+      const { data: seen, error: seenError } = await admin
+        .from('payment_events')
+        .select('id')
+        .eq('event_id', eventId)
+        .maybeSingle()
+      if (seenError) throw seenError
+      if (seen) return apiSuccess({ duplicate: true }, 'Event already processed.')
     }
 
-    if (event === 'payment.failed') {
-      const { error: rejectError } = await admin
-        .from('registrations')
-        .update({ status: 'rejected' })
-        .eq('id', registrationId)
-        .eq('status', 'payment_pending')
+    let outcome: string
 
-      if (rejectError) {
-        console.error('[razorpay webhook] registrations reject update failed:', registrationId, rejectError)
-        return apiError('Failed to update registration.', 500)
+    if (event === 'payment.captured' || event === 'order.paid') {
+      if (!payment?.id || !orderId) {
+        outcome = 'ignored_no_payment'
+      } else {
+        outcome = (await settlePayment(admin, payment)).outcome
       }
-
-      if (orderId) {
-        const { error: orderError } = await admin
-          .from('payment_orders')
-          .update({ status: 'failed', updated_at: new Date().toISOString() })
-          .eq('razorpay_order_id', orderId)
-        if (orderError) {
-          console.error('[razorpay webhook] payment_orders update failed:', orderId, orderError)
-        }
-      }
-
-      return apiSuccess({ status: 'rejected' }, 'Payment failed — registration marked rejected.')
+    } else if (event === 'payment.failed') {
+      if (orderId) await markAttemptFailed(admin, orderId)
+      outcome = 'attempt_failed_recorded'
+    } else {
+      outcome = 'ignored_event'
     }
 
-    return apiSuccess({ ignored: true }, `Ignoring event "${event}".`)
+    await logPaymentEvent(admin, {
+      event_id: eventId,
+      source: 'webhook',
+      event_type: event ?? null,
+      razorpay_order_id: orderId ?? null,
+      razorpay_payment_id: payment?.id ?? null,
+      outcome,
+    })
+
+    return apiSuccess({ outcome }, 'OK')
   } catch (err: any) {
-    console.error('[razorpay webhook] unhandled error:', err)
+    // 5xx on purpose: Razorpay retries, and every step above is idempotent.
+    console.error('[razorpay webhook] processing failed:', err)
     return apiError('Webhook processing failed.', 500)
   }
+}
+
+// Non-secret health check so you can confirm the deployment is configured:
+//   GET https://hackathon.adz4needz.com/api/webhooks/razorpay
+export async function GET() {
+  return apiSuccess(
+    {
+      webhookSecretConfigured: !!process.env.RAZORPAY_WEBHOOK_SECRET,
+      apiKeyConfigured: !!process.env.RAZORPAY_KEY_ID && !!process.env.RAZORPAY_KEY_SECRET,
+    },
+    'Razorpay webhook endpoint is live.'
+  )
 }

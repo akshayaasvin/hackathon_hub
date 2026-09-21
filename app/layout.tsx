@@ -68,6 +68,12 @@ function Navbar() {
         </span>
       </Link>
       <div className="navbar-actions">
+        <Link
+          href="/webinar"
+          className={`navbar-desktop-link ${pathname === '/webinar' ? 'active' : ''}`}
+        >
+          Webinars
+        </Link>
         {isLoggedIn ? (
           <>
             <NotificationBell />

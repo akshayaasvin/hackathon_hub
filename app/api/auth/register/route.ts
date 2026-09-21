@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     // immediately (email confirmation drives the auto-activation trigger). ──
     if (input.role === 'participant') {
       const supabase = await createClient()
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin
+      const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/+$/, '')
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: input.email,
         password: input.password,

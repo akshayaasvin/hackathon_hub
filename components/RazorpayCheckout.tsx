@@ -4,6 +4,8 @@
 // Payment Button embed. The order is created server-side (create-order
 // route); this just opens Razorpay's modal against that order.
 
+import { postJson } from '@/lib/apiFetch'
+
 declare global {
   interface Window {
     Razorpay: any
@@ -41,18 +43,40 @@ export interface RazorpayCheckoutResult {
   razorpay_signature: string
 }
 
+export type VerifyOutcome = 'paid' | 'pending' | 'failed' | 'review' | 'error'
+
+/**
+ * Asks OUR server to confirm a payment the browser reports as successful.
+ * The server checks Razorpay's signature, re-fetches the payment from Razorpay's
+ * API and settles the registration (see app/api/payments/verify). Retries a few
+ * times on network / Razorpay-side hiccups. 'pending' means "not captured yet" —
+ * keep polling; the webhook and the status/sync routes will also catch up.
+ */
+export async function verifyPaymentOnServer(result: RazorpayCheckoutResult): Promise<VerifyOutcome> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 1500 * attempt))
+    const res = await postJson<{ status: 'paid' | 'pending' | 'failed' | 'review' }>('/api/payments/verify', result)
+    if (res.success && res.data?.status) return res.data.status
+    // A definite "no" (bad signature / unknown order / amount mismatch) is not worth retrying.
+    if (!res.success && /signature|Unknown order|amount does not match|belong/i.test(res.message)) return 'error'
+  }
+  return 'error'
+}
+
 /**
  * Opens the Razorpay Checkout modal for an already-created order.
  * `onSuccess` fires with the client-side result the moment the user
- * completes payment — treat that as "verifying", not "paid": the source of
- * truth is the signature-verified webhook, which is what actually moves the
- * registration to 'approved'.
+ * completes payment — treat that as "verifying", not "paid": call
+ * verifyPaymentOnServer() next. The registration only changes once the SERVER
+ * has verified the payment (or the signature-verified webhook arrives first).
  */
 export async function openRazorpayCheckout(
   order: RazorpayOrder,
   handlers: {
     name?: string
     email?: string
+    contact?: string
+    description?: string
     onSuccess: (result: RazorpayCheckoutResult) => void
     onDismiss: () => void
     onFailure?: (error: any) => void
@@ -66,8 +90,8 @@ export async function openRazorpayCheckout(
     amount: order.amount,
     currency: order.currency,
     name: 'HackathonHub',
-    description: 'Hackathon registration fee',
-    prefill: { name: handlers.name, email: handlers.email },
+    description: handlers.description ?? 'Hackathon registration fee',
+    prefill: { name: handlers.name, email: handlers.email, contact: handlers.contact },
     handler: (response: RazorpayCheckoutResult) => handlers.onSuccess(response),
     modal: { ondismiss: handlers.onDismiss },
   })

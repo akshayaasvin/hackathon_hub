@@ -1,7 +1,30 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// Razorpay only accepts checkouts from the domain registered on the account. On the
+// PRODUCTION deployment, any other hostname (e.g. <project>.vercel.app) is redirected
+// to NEXT_PUBLIC_SITE_URL (https://hackathon.adz4needz.com). Preview deployments and
+// local dev are untouched. Only set NEXT_PUBLIC_SITE_URL once that domain is attached
+// to THIS Vercel project, otherwise the redirect would send visitors somewhere else.
+function canonicalRedirect(request: NextRequest): NextResponse | null {
+  const site = process.env.NEXT_PUBLIC_SITE_URL
+  if (!site || process.env.VERCEL_ENV !== 'production') return null
+  let canonicalHost: string
+  try {
+    canonicalHost = new URL(site).host
+  } catch {
+    return null
+  }
+  const host = request.headers.get('host')
+  if (!host || host === canonicalHost) return null
+  const target = new URL(request.nextUrl.pathname + request.nextUrl.search, site)
+  return NextResponse.redirect(target, 308)
+}
+
 export async function middleware(request: NextRequest) {
+  const canonical = canonicalRedirect(request)
+  if (canonical) return canonical
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -44,6 +67,12 @@ export async function middleware(request: NextRequest) {
   // Diagnostic pages always render — never gated behind a role/status lookup,
   // since they exist specifically to report when that lookup itself fails.
   if (path === '/auth-error' || path === '/access-denied') {
+    return response
+  }
+
+  // /webinar is a public page for everyone — logged out, or logged in as any role and
+  // any account status. Never redirected to /login or a role dashboard.
+  if (path === '/webinar' || path.startsWith('/webinar/')) {
     return response
   }
 

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import HeroBackground from '@/components/HeroBackground'
 import HeroIllustration from '@/components/HeroIllustration'
 import FeaturedHackathons from '@/components/landing/FeaturedHackathons'
+import WebinarList from '@/components/webinar/WebinarList'
 import {
   Trophy, Rocket, Cpu, Code, GitFork, Award,
   ArrowRight, Zap, Users,
@@ -285,6 +286,11 @@ export default function Home() {
             <FeaturedHackathons />
           </div>
         </div>
+      </RevealOnScroll>
+
+      {/* ── UPCOMING WEBINARS (renders nothing when none are published) ── */}
+      <RevealOnScroll>
+        <WebinarList variant="landing" />
       </RevealOnScroll>
 
       {/* ── FOR INSTITUTIONS ── */}
