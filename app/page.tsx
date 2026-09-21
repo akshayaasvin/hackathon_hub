@@ -180,6 +180,12 @@ export default function Home() {
                 recognition through expert-led hackathons.
               </p>
 
+              <a href="/webinar" className="webinar-pill">
+                <span className="live-dot" aria-hidden="true" />
+                Live webinars are open — reserve your spot
+                <ArrowRight size={15} />
+              </a>
+
               <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }} className="flex-mobile-wrap">
                 <a href="/register" className="btn-cta-primary-bright">
                   Register Now
@@ -221,6 +227,11 @@ export default function Home() {
           <path d="M0,40 C240,80 480,0 720,20 C960,40 1200,80 1440,40 L1440,80 L0,80 Z" fill="rgba(108,71,255,0.04)" />
         </svg>
       </div>
+
+      {/* ── UPCOMING WEBINARS — highlighted, right under the hero (renders nothing when none are published) ── */}
+      <RevealOnScroll>
+        <WebinarList variant="landing" />
+      </RevealOnScroll>
 
       {/* ── BENEFITS (why join / what you get) ── */}
       <RevealOnScroll>
@@ -286,11 +297,6 @@ export default function Home() {
             <FeaturedHackathons />
           </div>
         </div>
-      </RevealOnScroll>
-
-      {/* ── UPCOMING WEBINARS (renders nothing when none are published) ── */}
-      <RevealOnScroll>
-        <WebinarList variant="landing" />
       </RevealOnScroll>
 
       {/* ── FOR INSTITUTIONS ── */}

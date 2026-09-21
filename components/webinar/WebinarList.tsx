@@ -112,9 +112,14 @@ export default function WebinarList({ variant }: { variant: 'landing' | 'dashboa
     if (webinars.length === 0) return null
     return (
       <div id="webinars" className="premium-container" style={{ width: '100%' }}>
-        <h2 className="section-title">Upcoming Webinars</h2>
-        <p className="section-subtitle">Live sessions from the HackathonHub community.</p>
-        <div style={{ marginBottom: '24px' }}>{cards}</div>
+        <div className="webinar-section-card">
+          <span className="webinar-badge">
+            <span className="live-dot" /> New · Live sessions
+          </span>
+          <h2 className="section-title">Upcoming Webinars</h2>
+          <p className="section-subtitle">Learn live from the HackathonHub community — reserve your spot before it fills up.</p>
+          <div style={{ marginBottom: '16px' }}>{cards}</div>
+        </div>
       </div>
     )
   }

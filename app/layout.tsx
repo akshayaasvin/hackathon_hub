@@ -70,8 +70,9 @@ function Navbar() {
       <div className="navbar-actions">
         <Link
           href="/webinar"
-          className={`navbar-desktop-link ${pathname === '/webinar' ? 'active' : ''}`}
+          className={`navbar-webinar-link ${pathname === '/webinar' ? 'active' : ''}`}
         >
+          <span className="live-dot" aria-hidden="true" />
           Webinars
         </Link>
         {isLoggedIn ? (
