@@ -94,9 +94,9 @@ export async function POST(request: Request) {
 
       if (signUpError || !signUpData.user) {
         return apiError(
-          signUpError?.message.includes('already registered')
-            ? 'An account with this email already exists.'
-            : signUpError?.message || 'Registration failed',
+          signUpError?.message && /already\s*regist/i.test(signUpError.message)
+            ? 'An account with this email already exists. Try logging in, or use "Forgot password" if you don\'t remember it.'
+            : signUpError?.message || 'Registration failed. Please try again.',
           400
         )
       }
@@ -132,35 +132,51 @@ export async function POST(request: Request) {
         )
       }
 
-      const { error: profileError } = await admin.from('participant_profiles').insert({
-        user_id: userId,
-        college_name: input.college_name,
-        college_id: input.college_id || null,
-        passout_year: input.passout_year,
-        degree: input.degree,
-        domain: input.domain,
-        experience_level: input.experience_level,
-        contact_number: input.contact_number,
-        address: input.address,
-        date_of_birth: input.date_of_birth,
-      })
+      // Upsert, not insert: re-submitting the same (still-unconfirmed) email is a normal
+      // thing to do — Supabase's signUp() above just resends the confirmation link for the
+      // SAME account instead of erroring, so this call sees the SAME userId again. A plain
+      // insert would then fail on the profile row the first attempt already created, and
+      // failing here must NEVER delete the auth account — the confirmation link already
+      // emailed to the participant points at it; deleting it breaks that link instead of
+      // just letting them click it (this is what previously turned into "Email link is
+      // invalid or has expired" after a second registration attempt).
+      const { error: profileError } = await admin.from('participant_profiles').upsert(
+        {
+          user_id: userId,
+          college_name: input.college_name,
+          college_id: input.college_id || null,
+          passout_year: input.passout_year,
+          degree: input.degree,
+          domain: input.domain,
+          experience_level: input.experience_level,
+          contact_number: input.contact_number,
+          address: input.address,
+          date_of_birth: input.date_of_birth,
+        },
+        { onConflict: 'user_id' }
+      )
 
       if (profileError) {
-        console.error('[register] participant_profiles insert failed:', profileError)
-        await admin.from('users').delete().eq('id', userId)
-        try {
-          await admin.auth.admin.deleteUser(userId)
-        } catch {}
-        return apiError('Could not save your profile details. Please try again.', 500)
+        console.error('[register] participant_profiles upsert failed:', profileError)
+        // Only clean up the auth account when NOTHING was ever saved for it — a brand-new
+        // signup whose very first write failed. If a profile already existed (this was a
+        // resubmission), leave the account alone: it's still valid, just tell them what to do.
+        const { data: existingProfile } = await admin.from('participant_profiles').select('user_id').eq('user_id', userId).maybeSingle()
+        if (!existingProfile) {
+          await admin.from('users').delete().eq('id', userId)
+          try {
+            await admin.auth.admin.deleteUser(userId)
+          } catch {}
+        }
+        return apiError('Could not save your profile details. Please try again in a moment.', 500)
       }
 
-      // Reflects the real state: with Supabase's "Confirm email" requirement
-      // off, signUp() confirms the address immediately, so this is 'active'
-      // (per the 0022 migration's on_auth_user_created update) rather than
-      // the 'pending' this used to hardcode back when a confirmation email
-      // gated activation.
+      // With Supabase's "Confirm email" requirement ON (see README setup step 3), a brand
+      // new signUp() leaves email_confirmed_at null until the participant clicks the link —
+      // that's 'pending', not an error. Re-submitting the same unconfirmed email lands here
+      // too (a fresh confirmation link was just emailed), so 'pending' covers both cases.
       const status = signUpData.user.email_confirmed_at ? 'active' : 'pending'
-      return apiSuccess({ role: 'participant', status }, 'Registration successful.')
+      return apiSuccess({ role: 'participant', status, email: input.email }, 'Registration successful.')
     }
 
     // ── College / Jury: staging-table application, no auth account yet. ──

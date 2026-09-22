@@ -4,11 +4,14 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-export function LoginForm() {
+export function LoginForm({ initialNotice }: { initialNotice?: { type: 'error' | 'success'; message: string } }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // Cleared as soon as the visitor interacts with the form (submits, or the URL notice
+  // wouldn't apply to whatever they're about to try) so it can't linger after they've moved on.
+  const [notice, setNotice] = useState(initialNotice ?? null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -16,6 +19,7 @@ export function LoginForm() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setNotice(null)
 
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
@@ -55,7 +59,11 @@ export function LoginForm() {
 
       router.refresh()
     } catch (err: any) {
-      setError(err.message)
+      setError(
+        /email not confirmed/i.test(err.message)
+          ? 'This email hasn\'t been confirmed yet. Check your inbox for the confirmation link, or go to Register and submit the same email again to get a new one.'
+          : err.message
+      )
     } finally {
       setLoading(false)
     }
@@ -75,12 +83,12 @@ export function LoginForm() {
         Login to Dashboard
       </h2>
 
-      {error && (
+      {(error || notice) && (
         <div
           style={{
-            background: 'rgba(239, 68, 68, 0.1)',
-            border: '1px solid rgba(239, 68, 68, 0.2)',
-            color: 'var(--danger)',
+            ...(error || notice?.type === 'error'
+              ? { background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: 'var(--danger)' }
+              : { background: 'var(--success-bg)', border: '1px solid var(--success-border)', color: 'var(--success)' }),
             padding: '12px',
             borderRadius: '8px',
             marginBottom: '20px',
@@ -88,7 +96,7 @@ export function LoginForm() {
             textAlign: 'center',
           }}
         >
-          {error}
+          {error || notice?.message}
         </div>
       )}
 
