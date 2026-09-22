@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, CheckCircle2, Loader2, Video } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Loader2, Search, Video } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { postJson } from '@/lib/apiFetch'
 import {
@@ -32,6 +32,15 @@ interface RegisterData {
 
 interface ConfirmedStatus {
   status: 'payment_pending' | 'paid' | 'free'
+  fullName: string
+  amount: number | null
+  paymentId: string | null
+  webinar: { title: string; startsAt: string | null; joinUrl: string | null } | null
+}
+
+interface LookupResult {
+  registrationId: string
+  accessToken: string
   fullName: string
   amount: number | null
   paymentId: string | null
@@ -91,8 +100,15 @@ const loadRegistration = (): { registrationId: string; token: string } | null =>
 
 const labelStyle = { display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' } as const
 
-export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] }) {
-  const [selectedId, setSelectedId] = useState<string>(webinars.length === 1 ? webinars[0].id : '')
+export function WebinarRegistration({ webinars, initialWebinarId }: { webinars: PublicWebinar[]; initialWebinarId?: string }) {
+  const preselected = initialWebinarId && webinars.some((w) => w.id === initialWebinarId) ? initialWebinarId : null
+  const [selectedId, setSelectedId] = useState<string>(preselected || (webinars.length === 1 ? webinars[0].id : ''))
+  const [lookupOpen, setLookupOpen] = useState(false)
+  const [lookupEmail, setLookupEmail] = useState('')
+  const [lookupPhone, setLookupPhone] = useState('')
+  const [lookupBusy, setLookupBusy] = useState(false)
+  const [lookupError, setLookupError] = useState<string | null>(null)
+  const [lookupResults, setLookupResults] = useState<LookupResult[] | null>(null)
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
@@ -213,7 +229,7 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
         setConfirmed(status)
         setPhase('done')
       } else {
-        setNotice('You are registered. A confirmation will be emailed to you shortly.')
+        setNotice('You are registered — reopen this page in this browser to see your meeting link.')
       }
       setBusy(false)
       return
@@ -240,6 +256,27 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
       console.error('[webinar] could not open checkout:', err)
       setError('Could not open the payment window. Please check your connection and try again.')
       setBusy(false)
+    }
+  }
+
+  const handleLookup = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLookupBusy(true)
+    setLookupError(null)
+    setLookupResults(null)
+    const res = await postJson<{ registrations: LookupResult[] }>('/api/webinar/lookup', {
+      email: lookupEmail,
+      phone: lookupPhone,
+    })
+    setLookupBusy(false)
+    if (!res.success || !res.data) {
+      setLookupError(res.message)
+      return
+    }
+    setLookupResults(res.data.registrations)
+    // Remember the first result too, so reopening the page keeps showing it.
+    if (res.data.registrations[0]) {
+      saveRegistration({ registrationId: res.data.registrations[0].registrationId, token: res.data.registrations[0].accessToken })
     }
   }
 
@@ -433,6 +470,63 @@ export function WebinarRegistration({ webinars }: { webinars: PublicWebinar[] })
 
   return (
     <div style={{ display: 'grid', gap: '20px' }}>
+      <div className="glass-card" style={{ padding: '16px 20px' }}>
+        <button
+          type="button"
+          onClick={() => setLookupOpen((v) => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 600, fontSize: '14px', cursor: 'pointer', padding: 0 }}
+        >
+          <Search size={16} /> Already registered? Find your meeting link
+        </button>
+
+        {lookupOpen && (
+          <div style={{ marginTop: '16px' }}>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+              Enter the email and mobile number you registered with — we&apos;ll show your meeting link if it&apos;s confirmed.
+            </p>
+            <form onSubmit={handleLookup} className="responsive-grid-2" style={{ alignItems: 'end', gap: '12px' }}>
+              <div>
+                <label htmlFor="wb-lookup-email" style={labelStyle}>Email</label>
+                <input id="wb-lookup-email" type="email" className="premium-input" value={lookupEmail} onChange={(e) => setLookupEmail(e.target.value)} required maxLength={254} autoComplete="email" />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'end' }}>
+                <div style={{ flex: 1 }}>
+                  <label htmlFor="wb-lookup-phone" style={labelStyle}>Mobile number</label>
+                  <input id="wb-lookup-phone" type="tel" inputMode="numeric" className="premium-input" value={lookupPhone} onChange={(e) => setLookupPhone(e.target.value)} required maxLength={20} autoComplete="tel" />
+                </div>
+                <button type="submit" disabled={lookupBusy} className="btn btn-primary" style={{ padding: '11px 18px', whiteSpace: 'nowrap' }}>
+                  {lookupBusy ? 'Searching…' : 'Find'}
+                </button>
+              </div>
+            </form>
+
+            {lookupError && (
+              <p role="alert" style={{ color: 'var(--danger)', fontSize: '13px', marginTop: '12px' }}>{lookupError}</p>
+            )}
+
+            {lookupResults && (
+              <div style={{ display: 'grid', gap: '12px', marginTop: '16px' }}>
+                {lookupResults.map((r) => (
+                  <div key={r.registrationId} style={{ padding: '14px 16px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'rgba(16,185,129,0.04)' }}>
+                    <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '6px' }}>{r.webinar?.title ?? 'Webinar'}</div>
+                    {r.webinar?.joinUrl ? (
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <a href={r.webinar.joinUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: '7px 14px', fontSize: '13px', display: 'inline-flex', gap: '6px' }}>
+                          <Video size={13} /> Join
+                        </a>
+                        <CopyLinkButton url={r.webinar.joinUrl} small />
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>The meeting link hasn&apos;t been added yet — check back later.</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {webinars.length > 1 && (
         <div style={{ display: 'grid', gap: '12px' }}>
           {webinars.map((w) => {
