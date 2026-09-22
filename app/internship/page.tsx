@@ -153,7 +153,10 @@ export default async function InternshipListPage() {
                 <Link href={`/internship/${i.id}`} className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }}>
                   View Details
                 </Link>
-                <Link href={`/internship/${i.id}`} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                {/* Skips straight past the details screen into the registration/payment
+                    flow — "View Details" still lands on that screen for anyone who wants
+                    to read first (it has its own Register Now button too). */}
+                <Link href={`/internship/${i.id}?start=1`} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
                   Register Now
                 </Link>
               </div>
