@@ -15,6 +15,7 @@ export async function GET() {
       .from('webinars')
       .select('id, title, description, starts_at, fee, currency, join_url')
       .eq('status', 'published')
+      .is('deleted_at', null)
       .order('starts_at', { ascending: true, nullsFirst: false })
     if (error) throw error
     const webinars = data ?? []

@@ -14,7 +14,11 @@ export async function GET() {
   try {
     if (!(await requireAdmin())) return apiError('Forbidden — admin access required.', 403)
     const admin = createAdminClient()
-    const { data, error } = await admin.from('internships').select('*').order('created_at', { ascending: false })
+    const { data, error } = await admin
+      .from('internships')
+      .select('*')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
     if (error) throw error
     return apiSuccess({ internships: data ?? [] }, 'OK')
   } catch (err) {

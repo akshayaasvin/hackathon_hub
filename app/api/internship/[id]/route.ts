@@ -22,12 +22,12 @@ export async function GET(_request: Request, { params }: { params: { id: string 
         `id, title, topic, description, category, skills_required, eligibility_text,
          duration_text, mode, start_date, end_date, application_deadline, seats_total,
          is_paid, fee, currency, assessment_enabled, assessment_passing_score_percent,
-         assessment_time_limit_minutes, assessment_questions, form_config, banner_url, status`
+         assessment_time_limit_minutes, assessment_questions, form_config, banner_url, status, deleted_at`
       )
       .eq('id', params.id)
       .maybeSingle()
     if (error) throw error
-    if (!internship || internship.status !== 'published') return apiError('Internship not found.', 404)
+    if (!internship || internship.status !== 'published' || internship.deleted_at) return apiError('Internship not found.', 404)
 
     const formConfig = parseFormConfig(internship.form_config)
     const fixedFields = formConfig.fixedFields.map((f) => {

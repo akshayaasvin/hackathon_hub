@@ -197,8 +197,8 @@ export default function InternshipFlow({ internshipId, autoStart }: { internship
           <h2 style={{ fontSize: '24px', margin: 0 }}>Registration confirmed!</h2>
         </div>
         <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: '16px' }}>
-          Thanks — your application for <strong>{details?.title}</strong> is complete. A confirmation has been emailed to{' '}
-          <strong>{prefill.email}</strong>.
+          Thanks — your application for <strong>{details?.title}</strong> is complete. A confirmation email will be sent from{' '}
+          <strong>hr@adz4needz.com</strong>. Kindly check your registered email, including your Spam or Promotions folder.
         </p>
         <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Registration ID</div>
         <div
