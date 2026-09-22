@@ -16,7 +16,7 @@ function todayISODate(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: string) => void }) {
+export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: string, email: string) => void }) {
   const [form, setForm] = useState({
     full_name: '',
     email: '',
@@ -30,6 +30,7 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
     address: '',
     date_of_birth: '',
   })
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [serverError, setServerError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -92,15 +93,20 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
       setErrors(fieldErrors)
       return
     }
+    // Confirm-password check is UI-only — never sent to the server.
+    if (form.password !== confirmPassword) {
+      setErrors({ confirm_password: 'Passwords do not match.' })
+      return
+    }
     setErrors({})
     setLoading(true)
     try {
-      const result = await postJson<{ status: string }>('/api/auth/register', parsed.data)
+      const result = await postJson<{ status: string; email: string }>('/api/auth/register', parsed.data)
       if (!result.success) {
         setServerError(result.message)
         return
       }
-      onSuccess(result.data!.status)
+      onSuccess(result.data!.status, result.data!.email)
     } finally {
       setLoading(false)
     }
@@ -134,15 +140,28 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
         </FormField>
       </div>
 
-      <FormField label="Password" error={errors.password}>
-        <input
-          type="password"
-          className="premium-input"
-          value={form.password}
-          onChange={set('password')}
-          required
-        />
-      </FormField>
+      <div style={gridStyle}>
+        <FormField label="Password" error={errors.password}>
+          <input
+            type="password"
+            className="premium-input"
+            value={form.password}
+            onChange={set('password')}
+            autoComplete="new-password"
+            required
+          />
+        </FormField>
+        <FormField label="Confirm Password" error={errors.confirm_password}>
+          <input
+            type="password"
+            className="premium-input"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password"
+            required
+          />
+        </FormField>
+      </div>
 
       <div style={gridStyle}>
         <FormField label="College Name" error={errors.college_name}>
