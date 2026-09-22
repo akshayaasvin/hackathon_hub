@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { PasswordInput } from '@/components/ui/PasswordInput'
 
 export function LoginForm({ initialNotice }: { initialNotice?: { type: 'error' | 'success'; message: string } }) {
   const [email, setEmail] = useState('')
@@ -113,14 +114,7 @@ export function LoginForm({ initialNotice }: { initialNotice?: { type: 'error' |
         </div>
 
         <div style={{ marginBottom: '28px' }}>
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className="premium-input"
-          />
+          <PasswordInput placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
         </div>
 
         <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', padding: '14px' }}>

@@ -65,6 +65,112 @@ export function applicationReceivedEmailHtml({ fullName }: { fullName: string })
   `
 }
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string)
+}
+
+// Small, safe subset of markdown for admin-authored internship email content (section 9):
+// **bold**, "- " bullet lists, [text](url) links (http/https only), blank-line paragraphs.
+// Escapes first, so nothing the admin pastes can break out of the template as raw HTML.
+function miniMarkdownToHtml(text: string): string {
+  const escaped = escapeHtml(text)
+  const withInline = (s: string) =>
+    s
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" style="color:#6C47FF;">$1</a>')
+
+  const blocks = escaped.split(/\n\s*\n/)
+  return blocks
+    .map((block) => {
+      const lines = block.split('\n').map((l) => l.trim()).filter(Boolean)
+      if (lines.length === 0) return ''
+      if (lines.every((l) => l.startsWith('- '))) {
+        return '<ul style="margin:0 0 12px;padding-left:20px;">' + lines.map((l) => `<li>${withInline(l.slice(2))}</li>`).join('') + '</ul>'
+      }
+      return `<p style="margin:0 0 12px;">${lines.map(withInline).join('<br>')}</p>`
+    })
+    .join('')
+}
+
+/**
+ * Fills {{placeholder}} tokens in admin-authored text with dynamic values. Every value is
+ * HTML-escaped before substitution — some (student_name, ...) originate from a public
+ * registration form, so this is what stops a crafted name from injecting markup into an
+ * email whose surrounding text an admin wrote and trusted.
+ */
+function fillPlaceholders(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (match, key) => {
+    const v = vars[key]
+    return v !== undefined ? escapeHtml(v) : match
+  })
+}
+
+export interface InternshipEmailContent {
+  subject: string | null
+  heading: string | null
+  body: string | null
+  ctaText: string | null
+  ctaLink: string | null
+  instructions: string | null
+  supportContact: string | null
+}
+
+/**
+ * Renders the per-internship confirmation email (section 9/10) — every word of subject,
+ * heading, body, CTA and instructions comes from the internship's OWN admin-edited content,
+ * never hard-coded. Falls back to a plain, complete default only for whatever the admin left
+ * blank, so a half-filled email section never produces a broken or empty email.
+ */
+export function renderInternshipEmail(
+  content: InternshipEmailContent,
+  vars: {
+    student_name: string
+    internship_name: string
+    registration_id: string
+    assessment_status: string
+    assessment_score: string
+    eligibility_status: string
+    payment_status: string
+    start_date: string
+    duration: string
+    next_steps: string
+    internship_link: string
+  }
+): { subject: string; html: string } {
+  const subjectTemplate = content.subject?.trim() || 'Internship Registration Confirmed – {{internship_name}}'
+  const headingTemplate = content.heading?.trim() || "You're registered, {{student_name}}!"
+  const bodyTemplate =
+    content.body?.trim() ||
+    'Your registration for **{{internship_name}}** has been received.\n\nRegistration ID: {{registration_id}}\nPayment status: {{payment_status}}\nEligibility status: {{eligibility_status}}\n\nNext steps: {{next_steps}}'
+
+  const subject = fillPlaceholders(subjectTemplate, vars)
+  const heading = fillPlaceholders(headingTemplate, vars)
+  const bodyHtml = miniMarkdownToHtml(fillPlaceholders(bodyTemplate, vars))
+  const instructionsHtml = content.instructions?.trim() ? miniMarkdownToHtml(fillPlaceholders(content.instructions, vars)) : ''
+  const ctaText = content.ctaText?.trim() ? fillPlaceholders(content.ctaText, vars) : ''
+  const ctaLink = content.ctaLink?.trim() || vars.internship_link
+  const supportContact = content.supportContact?.trim() ? fillPlaceholders(content.supportContact, vars) : ''
+
+  const html = `
+    <div style="font-family: sans-serif; max-width: 520px; margin: 0 auto; color: #0A0E1A;">
+      <h2 style="margin:0 0 16px;">${heading}</h2>
+      ${bodyHtml}
+      ${
+        instructionsHtml
+          ? `<div style="background:#F8F9FF;border-left:3px solid #6C47FF;padding:12px 16px;margin:16px 0;">${instructionsHtml}</div>`
+          : ''
+      }
+      ${
+        ctaText
+          ? `<p><a href="${escapeHtml(ctaLink)}" style="display:inline-block;background:#6C47FF;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">${ctaText}</a></p>`
+          : ''
+      }
+      ${supportContact ? `<p style="font-size:13px;color:#64748B;margin-top:20px;">Questions? Contact ${supportContact}</p>` : ''}
+    </div>
+  `
+  return { subject, html }
+}
+
 export function changesRequestedEmailHtml({ fullName, notes }: { fullName: string; notes: string }) {
   return `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">

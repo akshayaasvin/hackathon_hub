@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { PasswordInput } from '@/components/ui/PasswordInput'
 
 /**
  * A branded, role-specific login form rendered IN PLACE at a protected route
@@ -108,14 +109,7 @@ export function RoleLoginGate({
             />
           </div>
           <div style={{ marginBottom: '28px' }}>
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="premium-input"
-            />
+            <PasswordInput placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
           </div>
           <button
             type="submit"

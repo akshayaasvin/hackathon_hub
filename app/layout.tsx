@@ -69,6 +69,13 @@ function Navbar() {
       </Link>
       <div className="navbar-actions">
         <Link
+          href="/internship"
+          className="navbar-plain-link"
+          style={{ fontWeight: pathname.startsWith('/internship') ? 700 : 500, color: pathname.startsWith('/internship') ? 'var(--primary)' : undefined }}
+        >
+          Internships
+        </Link>
+        <Link
           href="/webinar"
           className={`navbar-webinar-link ${pathname === '/webinar' ? 'active' : ''}`}
         >

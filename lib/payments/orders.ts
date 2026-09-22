@@ -3,7 +3,15 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type Razorpay from 'razorpay'
 import { getRazorpayKeyId } from '@/lib/razorpay'
 
-export type PaymentKind = 'hackathon' | 'webinar'
+export type PaymentKind = 'hackathon' | 'webinar' | 'internship'
+
+export const TARGET_COLUMN: Record<PaymentKind, string> = {
+  hackathon: 'registration_id',
+  webinar: 'webinar_registration_id',
+  internship: 'internship_registration_id',
+}
+const RECEIPT_PREFIX: Record<PaymentKind, string> = { hackathon: 'hk', webinar: 'wb', internship: 'in' }
+const NOTE_TYPE: Record<PaymentKind, string> = { hackathon: 'HACKATHON', webinar: 'WEBINAR', internship: 'INTERNSHIP' }
 
 export interface CheckoutOrder {
   order_id: string
@@ -16,7 +24,7 @@ export interface CheckoutOrder {
 const REUSE_WINDOW_MS = 24 * 60 * 60 * 1000
 
 /**
- * The ONE place a Razorpay order is created, for both Hackathon and Webinar
+ * The ONE place a Razorpay order is created, for Hackathon, Webinar AND Internship
  * payments. Guarantees that:
  *   - the amount comes from the caller (server-side DB fee), never the browser;
  *   - the order is written to `payment_orders` BEFORE it is handed to the
@@ -38,7 +46,7 @@ export async function getOrCreateOrder(
 ): Promise<CheckoutOrder> {
   const { kind, targetId, amountRupees, currency } = opts
   const amountPaise = Math.round(amountRupees * 100)
-  const targetColumn = kind === 'webinar' ? 'webinar_registration_id' : 'registration_id'
+  const targetColumn = TARGET_COLUMN[kind]
 
   const { data: open, error: openError } = await admin
     .from('payment_orders')
@@ -58,11 +66,11 @@ export async function getOrCreateOrder(
   const order = await razorpay.orders.create({
     amount: amountPaise,
     currency,
-    // <=40 chars (Razorpay limit): 3-char prefix + 36-char uuid
-    receipt: `${kind === 'webinar' ? 'wb' : 'hk'}_${targetId}`,
+    // <=40 chars (Razorpay limit): 2-char prefix + 36-char uuid
+    receipt: `${RECEIPT_PREFIX[kind]}_${targetId}`,
     notes: {
       ...opts.notes,
-      type: kind === 'webinar' ? 'WEBINAR' : 'HACKATHON',
+      type: NOTE_TYPE[kind],
       [targetColumn]: targetId,
     },
   })

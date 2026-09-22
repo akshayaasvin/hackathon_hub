@@ -20,6 +20,8 @@ import {
   User,
   Video,
   Ticket,
+  Briefcase,
+  ClipboardList,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { RoleLoginGate } from '@/components/auth/RoleLoginGate'
@@ -34,6 +36,8 @@ const navItems = [
   { href: '/admin/applications', label: 'Applications', icon: <FileSpreadsheet size={18} /> },
   { href: '/admin/webinars', label: 'Webinars', icon: <Video size={18} /> },
   { href: '/admin/webinar-registrations', label: 'Webinar Registrations', icon: <Ticket size={18} /> },
+  { href: '/admin/internships', label: 'Internships', icon: <Briefcase size={18} /> },
+  { href: '/admin/internship-registrations', label: 'Internship Registrations', icon: <ClipboardList size={18} /> },
   { href: '/admin/submissions', label: 'Submissions', icon: <Send size={18} /> },
   { href: '/admin/announcements', label: 'Announcements', icon: <Megaphone size={18} /> },
   { href: '/admin/results', label: 'Results', icon: <Trophy size={18} /> },
