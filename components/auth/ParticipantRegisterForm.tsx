@@ -5,6 +5,7 @@ import { FormField } from './FormField'
 import { participantRegisterSchema } from '@/lib/validation'
 import { postJson } from '@/lib/apiFetch'
 import { createClient } from '@/lib/supabase/client'
+import { PasswordInput } from '@/components/ui/PasswordInput'
 
 const gridStyle: React.CSSProperties = {
   display: 'grid',
@@ -142,24 +143,10 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
 
       <div style={gridStyle}>
         <FormField label="Password" error={errors.password}>
-          <input
-            type="password"
-            className="premium-input"
-            value={form.password}
-            onChange={set('password')}
-            autoComplete="new-password"
-            required
-          />
+          <PasswordInput value={form.password} onChange={set('password')} autoComplete="new-password" minLength={6} required />
         </FormField>
         <FormField label="Confirm Password" error={errors.confirm_password}>
-          <input
-            type="password"
-            className="premium-input"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            autoComplete="new-password"
-            required
-          />
+          <PasswordInput value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" required />
         </FormField>
       </div>
 

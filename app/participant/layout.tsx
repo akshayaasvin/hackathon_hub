@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { LayoutDashboard, Users, Send, Trophy, Award, User, Video } from 'lucide-react'
+import { LayoutDashboard, Users, Send, Trophy, Award, User, Video, Briefcase, ClipboardList } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { SideDrawer } from '@/components/dashboard/SideDrawer'
 
@@ -13,6 +13,8 @@ const navItems = [
   { href: '/participant/teams', label: 'My Teams', icon: <Users size={18} /> },
   { href: '/participant/submissions', label: 'Submissions', icon: <Send size={18} /> },
   { href: '/webinar', label: 'Webinars', icon: <Video size={18} /> },
+  { href: '/internship', label: 'Internship', icon: <Briefcase size={18} /> },
+  { href: '/participant/internships', label: 'My Internships', icon: <ClipboardList size={18} /> },
   { href: '/results', label: 'Results', icon: <Trophy size={18} /> },
   { href: '/certificates', label: 'Certificates', icon: <Award size={18} /> },
   { href: '/profile', label: 'Profile', icon: <User size={18} /> },

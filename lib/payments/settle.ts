@@ -1,10 +1,11 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type Razorpay from 'razorpay'
-import type { PaymentKind } from './orders'
+import { TARGET_COLUMN, type PaymentKind } from './orders'
+import { sendInternshipConfirmation } from '@/lib/internshipEmail'
 
 /**
- * Single settlement path for EVERY Razorpay payment (Hackathon + Webinar).
+ * Single settlement path for EVERY Razorpay payment (Hackathon + Webinar + Internship).
  *
  * Three entry points feed it, all converging on `settlePayment`:
  *   1. the signature-verified webhook          (async, Razorpay -> us)
@@ -46,14 +47,14 @@ export async function settlePayment(admin: SupabaseClient, payment: RazorpayPaym
   // The server-side identifier: our own ledger row for this Razorpay order.
   const { data: order, error: orderError } = await admin
     .from('payment_orders')
-    .select('id, kind, registration_id, webinar_registration_id, amount, currency')
+    .select('id, kind, registration_id, webinar_registration_id, internship_registration_id, amount, currency')
     .eq('razorpay_order_id', payment.order_id)
     .maybeSingle()
   if (orderError) throw orderError
   if (!order) return { outcome: 'unknown_order' }
 
   const kind = order.kind as PaymentKind
-  const targetId = (kind === 'webinar' ? order.webinar_registration_id : order.registration_id) as string
+  const targetId = (order as any)[TARGET_COLUMN[kind]] as string
   const base = { kind, targetId }
 
   if (payment.status !== 'captured') return { outcome: 'not_captured', ...base }
@@ -80,7 +81,9 @@ export async function settlePayment(admin: SupabaseClient, payment: RazorpayPaym
   const outcome =
     kind === 'webinar'
       ? await settleWebinar(admin, targetId, payment.id, amountRupees, String(order.currency), now)
-      : await settleHackathon(admin, targetId, payment.id, amountRupees, now)
+      : kind === 'internship'
+        ? await settleInternship(admin, targetId, payment.id, amountRupees, String(order.currency), now)
+        : await settleHackathon(admin, targetId, payment.id, amountRupees, now)
 
   if (outcome === 'needs_review') {
     console.error('[payments] captured payment could not be applied — manual review needed', {
@@ -99,6 +102,14 @@ export async function settlePayment(admin: SupabaseClient, payment: RazorpayPaym
     .eq('id', order.id)
     .neq('status', 'paid')
   if (ledgerError) throw ledgerError
+
+  // Internship confirmation email — section 9/10. Only on the call that actually performed
+  // the transition (never on a replay), and never lets an email problem fail the payment.
+  if (outcome === 'settled' && kind === 'internship') {
+    await sendInternshipConfirmation(admin, targetId).catch((err) =>
+      console.error('[payments] internship confirmation email failed (non-fatal):', err)
+    )
+  }
 
   return { outcome, ...base }
 }
@@ -170,6 +181,39 @@ async function settleWebinar(
   return current?.payment_id === paymentId ? 'already_settled' : 'needs_review'
 }
 
+async function settleInternship(
+  admin: SupabaseClient,
+  internshipRegistrationId: string,
+  paymentId: string,
+  amountRupees: number,
+  currency: string,
+  now: string
+): Promise<'settled' | 'already_settled' | 'needs_review'> {
+  const { data: updated, error } = await admin
+    .from('internship_registrations')
+    .update({
+      status: 'registered',
+      amount: amountRupees,
+      currency,
+      payment_id: paymentId,
+      paid_at: now,
+      updated_at: now,
+    })
+    .eq('id', internshipRegistrationId)
+    .eq('status', 'payment_pending')
+    .select('id')
+  if (error) throw error
+  if (updated && updated.length > 0) return 'settled'
+
+  const { data: current, error: currentError } = await admin
+    .from('internship_registrations')
+    .select('status, payment_id')
+    .eq('id', internshipRegistrationId)
+    .maybeSingle()
+  if (currentError) throw currentError
+  return current?.payment_id === paymentId ? 'already_settled' : 'needs_review'
+}
+
 /**
  * Self-heal: ask Razorpay what actually happened to an order and settle any
  * captured payment. Safe to call repeatedly (settlePayment is idempotent).
@@ -195,7 +239,7 @@ export async function syncRegistrationOrders(
   kind: PaymentKind,
   targetId: string
 ): Promise<boolean> {
-  const column = kind === 'webinar' ? 'webinar_registration_id' : 'registration_id'
+  const column = TARGET_COLUMN[kind]
   const { data: orders, error } = await admin
     .from('payment_orders')
     .select('razorpay_order_id')

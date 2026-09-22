@@ -70,9 +70,10 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // /webinar is a public page for everyone — logged out, or logged in as any role and
-  // any account status. Never redirected to /login or a role dashboard.
-  if (path === '/webinar' || path.startsWith('/webinar/')) {
+  // /webinar and /internship are public for everyone — logged out, or logged in as any role
+  // and any account status. Never redirected to /login or a role dashboard. Internship
+  // registration must work with NO HackathonHub login at all (section 2).
+  if (path === '/webinar' || path.startsWith('/webinar/') || path === '/internship' || path.startsWith('/internship/')) {
     return response
   }
 
