@@ -7,10 +7,10 @@ export const metadata = {
   title: 'Internship | HackathonHub',
 }
 
-export default function InternshipDetailPage({ params }: { params: { id: string } }) {
+export default function InternshipDetailPage({ params, searchParams }: { params: { id: string }; searchParams: { start?: string } }) {
   return (
     <div className="premium-container fade-in" style={{ maxWidth: '760px' }}>
-      <InternshipFlow internshipId={params.id} />
+      <InternshipFlow internshipId={params.id} autoStart={searchParams?.start === '1'} />
     </div>
   )
 }

@@ -52,7 +52,7 @@ async function fetchRegistrationStatus(registrationId: string, token: string) {
   }
 }
 
-export default function InternshipFlow({ internshipId }: { internshipId: string }) {
+export default function InternshipFlow({ internshipId, autoStart }: { internshipId: string; autoStart?: boolean }) {
   const [phase, setPhase] = useState<Phase>('loading')
   const [details, setDetails] = useState<InternshipDetails | null>(null)
   const [loadError, setLoadError] = useState('')
@@ -73,7 +73,10 @@ export default function InternshipFlow({ internshipId }: { internshipId: string 
           return
         }
         setDetails(json.data)
-        setPhase('details')
+        // "Register Now" from the list page (?start=1) skips straight past the details
+        // screen into the flow — unless seats are full, in which case there's nothing to start.
+        const seatsFull = json.data.seatsAvailable != null && json.data.seatsAvailable <= 0
+        setPhase(autoStart && !seatsFull ? (json.data.assessment?.enabled ? 'assessment' : 'registration') : 'details')
       })
       .catch(() => {
         if (!cancelled) {
