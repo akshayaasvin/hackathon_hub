@@ -13,7 +13,7 @@ export const metadata = {
   description: 'Register for upcoming HackathonHub webinars.',
 }
 
-export default async function WebinarPage() {
+export default async function WebinarPage({ searchParams }: { searchParams: { w?: string } }) {
   let webinars: PublicWebinar[] = []
   let loadFailed = false
 
@@ -59,7 +59,7 @@ export default async function WebinarPage() {
           <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Check back soon — new sessions are announced regularly.</p>
         </div>
       ) : (
-        <WebinarRegistration webinars={webinars} />
+        <WebinarRegistration webinars={webinars} initialWebinarId={searchParams?.w} />
       )}
     </div>
   )

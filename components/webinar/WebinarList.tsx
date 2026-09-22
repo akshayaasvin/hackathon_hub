@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { ArrowUpRight, CalendarDays, CheckCircle2, Video } from 'lucide-react'
 import CopyLinkButton from '@/components/webinar/CopyLinkButton'
 
+const cardStyle = { display: 'flex', flexDirection: 'column' as const, justifyContent: 'space-between', textAlign: 'left' as const }
+
 interface ListedWebinar {
   id: string
   title: string
@@ -56,59 +58,73 @@ export default function WebinarList({ variant }: { variant: 'landing' | 'dashboa
       </div>
     ) : (
       <div className="responsive-card-grid">
-        {webinars.map((w) => (
-          <div key={w.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', textAlign: 'left' }}>
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
-                <h3 style={{ fontSize: '18px', color: 'var(--text-primary)' }}>{w.title}</h3>
-                <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: w.fee > 0 ? 'var(--primary)' : 'var(--success)' }}>
-                  {w.fee > 0 ? money(w.fee, w.currency) : 'Free'}
-                </span>
-              </div>
-              {w.startsAt && (
-                <p style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                  <CalendarDays size={14} />
-                  {new Date(w.startsAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })} IST
-                </p>
-              )}
-              {w.description && (
-                <p
-                  style={{
-                    color: 'var(--text-secondary)',
-                    fontSize: '14px',
-                    lineHeight: 1.6,
-                    marginBottom: '18px',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {w.description}
-                </p>
-              )}
-            </div>
-            {w.registered ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--success)', fontWeight: 600, fontSize: '14px' }}>
-                  <CheckCircle2 size={16} /> You&apos;re registered
-                </span>
-                {w.joinUrl && (
-                  <span style={{ display: 'inline-flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <a href={w.joinUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px', display: 'inline-flex', gap: '6px' }}>
-                      <Video size={14} /> Join
-                    </a>
-                    <CopyLinkButton url={w.joinUrl} small />
+        {webinars.map((w) => {
+          const body = (
+            <>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
+                  <h3 style={{ fontSize: '18px', color: 'var(--text-primary)' }}>{w.title}</h3>
+                  <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: w.fee > 0 ? 'var(--primary)' : 'var(--success)' }}>
+                    {w.fee > 0 ? money(w.fee, w.currency) : 'Free'}
                   </span>
+                </div>
+                {w.startsAt && (
+                  <p style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                    <CalendarDays size={14} />
+                    {new Date(w.startsAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })} IST
+                  </p>
+                )}
+                {w.description && (
+                  <p
+                    style={{
+                      color: 'var(--text-secondary)',
+                      fontSize: '14px',
+                      lineHeight: 1.6,
+                      marginBottom: '18px',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {w.description}
+                  </p>
                 )}
               </div>
-            ) : (
-              <Link href="/webinar" style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '14px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                Register now <ArrowUpRight size={14} />
-              </Link>
-            )}
-          </div>
-        ))}
+              {w.registered ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--success)', fontWeight: 600, fontSize: '14px' }}>
+                    <CheckCircle2 size={16} /> You&apos;re registered
+                  </span>
+                  {w.joinUrl && (
+                    <span style={{ display: 'inline-flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <a href={w.joinUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px', display: 'inline-flex', gap: '6px' }}>
+                        <Video size={14} /> Join
+                      </a>
+                      <CopyLinkButton url={w.joinUrl} small />
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span style={{ color: 'var(--primary)', fontWeight: 700, fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  Register now <ArrowUpRight size={14} />
+                </span>
+              )}
+            </>
+          )
+          // Not registered yet: the whole card is a banner that jumps straight to this
+          // webinar's registration form. Already registered: buttons inside handle actions
+          // (Join opens a new tab), so the card itself isn't a link.
+          return w.registered ? (
+            <div key={w.id} className="glass-card" style={cardStyle}>
+              {body}
+            </div>
+          ) : (
+            <Link key={w.id} href={`/webinar?w=${w.id}`} className="glass-card webinar-banner-card" style={{ ...cardStyle, textDecoration: 'none' }}>
+              {body}
+            </Link>
+          )
+        })}
       </div>
     )
 
