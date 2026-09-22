@@ -87,3 +87,23 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     return apiError('Something went wrong. Please try again.', 500)
   }
 }
+
+// Soft delete only — same reasoning as hackathons (0013): internship_registrations.internship_id
+// is `on delete restrict`, and even if it weren't, a real DELETE would erase payment/registration
+// history. Setting deleted_at hides it from every list (public and admin) immediately; the row
+// and every registration/payment under it stay intact for audit.
+export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+  try {
+    if (!(await requireAdmin())) return apiError('Forbidden — admin access required.', 403)
+    if (!UUID_RE.test(params.id)) return apiError('Internship not found.', 404)
+
+    const admin = createAdminClient()
+    const { error } = await admin.from('internships').update({ deleted_at: new Date().toISOString() }).eq('id', params.id)
+    if (error) throw error
+
+    return apiSuccess({ deleted: true }, 'Internship deleted.')
+  } catch (err) {
+    console.error('[admin internship delete] failed:', err)
+    return apiError('Could not delete internship. Please try again.', 500)
+  }
+}

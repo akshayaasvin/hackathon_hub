@@ -35,11 +35,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const admin = createAdminClient()
     const { data: internship, error: internshipError } = await admin
       .from('internships')
-      .select('id, status, assessment_enabled, assessment_time_limit_minutes, assessment_questions')
+      .select('id, status, assessment_enabled, assessment_time_limit_minutes, assessment_questions, deleted_at')
       .eq('id', params.id)
       .maybeSingle()
     if (internshipError) throw internshipError
-    if (!internship || internship.status !== 'published') return apiError('Internship not found.', 404)
+    if (!internship || internship.status !== 'published' || internship.deleted_at) return apiError('Internship not found.', 404)
     if (!internship.assessment_enabled) return apiError('This internship does not require an assessment.', 400)
 
     const questions = parseAssessmentQuestions(internship.assessment_questions)

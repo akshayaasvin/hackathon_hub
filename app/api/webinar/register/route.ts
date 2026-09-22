@@ -46,11 +46,11 @@ export async function POST(request: Request) {
 
     const { data: webinar, error: webinarError } = await admin
       .from('webinars')
-      .select('id, title, fee, currency, status, questions')
+      .select('id, title, fee, currency, status, questions, deleted_at')
       .eq('id', parsed.data.webinarId)
       .maybeSingle()
     if (webinarError) throw webinarError
-    if (!webinar) return apiError('Webinar not found.', 404)
+    if (!webinar || webinar.deleted_at) return apiError('Webinar not found.', 404)
     if (webinar.status !== 'published') return apiError('Registration for this webinar is closed.', 400)
 
     // Every answer is checked against THIS webinar's questions on the server.

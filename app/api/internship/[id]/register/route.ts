@@ -49,11 +49,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const admin = createAdminClient()
     const { data: internship, error: internshipError } = await admin
       .from('internships')
-      .select('id, status, is_paid, fee, currency, assessment_enabled, form_config')
+      .select('id, status, is_paid, fee, currency, assessment_enabled, form_config, deleted_at')
       .eq('id', params.id)
       .maybeSingle()
     if (internshipError) throw internshipError
-    if (!internship || internship.status !== 'published') return apiError('Internship not found.', 404)
+    if (!internship || internship.status !== 'published' || internship.deleted_at) return apiError('Internship not found.', 404)
 
     const formConfig = parseFormConfig(internship.form_config)
     const resumeField = formConfig.fixedFields.find((f) => f.key === 'resume')

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { postJson } from '@/lib/apiFetch'
-import { Plus, RefreshCw, Video } from 'lucide-react'
+import { Plus, RefreshCw, Trash2, Video } from 'lucide-react'
 import QuestionBuilder from '@/components/webinar/QuestionBuilder'
 import { draftsToQuestions, parseQuestions, toDraft, type DraftQuestion } from '@/lib/webinarQuestions'
 
@@ -42,6 +42,9 @@ export default function AdminWebinarsPage() {
   const [form, setForm] = useState(emptyForm)
   const [drafts, setDrafts] = useState<DraftQuestion[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<any>(null)
+  const [deleteCount, setDeleteCount] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     load()
@@ -55,7 +58,7 @@ export default function AdminWebinarsPage() {
     setCurrentUserId(user?.id ?? null)
 
     const [{ data: webinarRows }, { data: regRows }] = await Promise.all([
-      supabase.from('webinars').select('*').order('created_at', { ascending: false }),
+      supabase.from('webinars').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
       supabase.from('webinar_registrations').select('webinar_id, status'),
     ])
     setWebinars(webinarRows || [])
@@ -132,6 +135,31 @@ export default function AdminWebinarsPage() {
     const { error } = await supabase.from('webinars').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
     if (error) alert('Error: ' + error.message)
     else await load()
+  }
+
+  const handleOpenDeleteConfirm = async (w: any) => {
+    setDeleteTarget(w)
+    setDeleteCount(null)
+    const { count } = await supabase.from('webinar_registrations').select('id', { count: 'exact', head: true }).eq('webinar_id', w.id)
+    setDeleteCount(count ?? 0)
+  }
+
+  // Soft delete only — webinar_registrations.webinar_id is `on delete restrict` (0023), and
+  // even without that, a real delete would erase payment/registration history. deleted_at
+  // hides it from every list (public and admin) immediately; the row and its registrations
+  // stay intact for audit — same pattern as Hackathons.
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    const { error } = await supabase.from('webinars').update({ deleted_at: new Date().toISOString() }).eq('id', deleteTarget.id)
+    setDeleting(false)
+    if (error) {
+      alert('Error: ' + error.message)
+      return
+    }
+    setDeleteTarget(null)
+    setDeleteCount(null)
+    await load()
   }
 
   const syncPayments = async () => {
@@ -281,6 +309,9 @@ export default function AdminWebinarsPage() {
                         <button onClick={() => openEdit(w)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '13px' }}>
                           Edit
                         </button>
+                        <button onClick={() => handleOpenDeleteConfirm(w)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '13px', color: 'var(--danger)', display: 'inline-flex', gap: '4px' }}>
+                          <Trash2 size={13} /> Delete
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -290,6 +321,30 @@ export default function AdminWebinarsPage() {
           </tbody>
         </table>
       </div>
+
+      {deleteTarget && (
+        <div className="modal-overlay">
+          <div className="glass-card" style={{ width: '100%', maxWidth: '460px', padding: '32px' }}>
+            <h3 style={{ fontSize: '18px', marginBottom: '8px' }}>Delete "{deleteTarget.title}"?</h3>
+            {deleteCount === null ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>Checking related data...</p>
+            ) : (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
+                This webinar has <strong>{deleteCount}</strong> registration{deleteCount === 1 ? '' : 's'}. This is a soft delete —
+                that data stays in the database for audit purposes, but this webinar will disappear from every dashboard immediately.
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={() => { setDeleteTarget(null); setDeleteCount(null) }} className="btn btn-secondary" style={{ padding: '8px 16px' }}>
+                Cancel
+              </button>
+              <button onClick={handleConfirmDelete} disabled={deleting || deleteCount === null} className="btn btn-danger" style={{ padding: '8px 20px' }}>
+                {deleting ? 'Deleting...' : 'Delete Webinar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

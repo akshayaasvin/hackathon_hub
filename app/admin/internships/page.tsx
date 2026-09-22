@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Briefcase, Copy, Plus, RefreshCw } from 'lucide-react'
+import { Briefcase, Copy, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { postJson } from '@/lib/apiFetch'
+import { createClient } from '@/lib/supabase/client'
 import { parseFormConfig, draftsToQuestions, newDraft, toDraft, type DraftQuestion, type FixedFieldConfig } from '@/lib/internshipForm'
 import { parseAssessmentQuestions, draftsToAssessmentQuestions, newAssessmentDraft, toAssessmentDraft, type DraftAssessmentQuestion } from '@/lib/internshipAssessment'
 import FixedFieldsPicker from '@/components/internship/FixedFieldsPicker'
@@ -39,6 +40,10 @@ export default function AdminInternshipsPage() {
   const [fixedFields, setFixedFields] = useState<FixedFieldConfig[]>([])
   const [questionDrafts, setQuestionDrafts] = useState<DraftQuestion[]>([])
   const [assessmentDrafts, setAssessmentDrafts] = useState<DraftAssessmentQuestion[]>([])
+  const [deleteTarget, setDeleteTarget] = useState<any>(null)
+  const [deleteCount, setDeleteCount] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const supabase = createClient()
 
   useEffect(() => {
     load()
@@ -187,6 +192,28 @@ export default function AdminInternshipsPage() {
     const updateRes = await fetch(`/api/admin/internships/${i.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     const updateJson = await updateRes.json()
     if (!updateJson.success) return alert('Error: ' + updateJson.message)
+    await load()
+  }
+
+  const handleOpenDeleteConfirm = async (i: any) => {
+    setDeleteTarget(i)
+    setDeleteCount(null)
+    const { count } = await supabase.from('internship_registrations').select('id', { count: 'exact', head: true }).eq('internship_id', i.id)
+    setDeleteCount(count ?? 0)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    const res = await fetch(`/api/admin/internships/${deleteTarget.id}`, { method: 'DELETE' })
+    const json = await res.json()
+    setDeleting(false)
+    if (!json.success) {
+      alert('Error: ' + json.message)
+      return
+    }
+    setDeleteTarget(null)
+    setDeleteCount(null)
     await load()
   }
 
@@ -420,6 +447,7 @@ export default function AdminInternshipsPage() {
                         {i.status !== 'archived' && <button onClick={() => quickStatus(i, 'archived')} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '12px' }}>Archive</button>}
                         <button onClick={() => openEdit(i.id)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '12px' }}>Edit</button>
                         <button onClick={() => duplicate(i.id)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '12px', display: 'inline-flex', gap: '4px' }}><Copy size={12} /> Duplicate</button>
+                        <button onClick={() => handleOpenDeleteConfirm(i)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '12px', color: 'var(--danger)', display: 'inline-flex', gap: '4px' }}><Trash2 size={12} /> Delete</button>
                       </div>
                     </td>
                   </tr>
@@ -429,6 +457,30 @@ export default function AdminInternshipsPage() {
           </tbody>
         </table>
       </div>
+
+      {deleteTarget && (
+        <div className="modal-overlay">
+          <div className="glass-card" style={{ width: '100%', maxWidth: '460px', padding: '32px' }}>
+            <h3 style={{ fontSize: '18px', marginBottom: '8px' }}>Delete "{deleteTarget.title}"?</h3>
+            {deleteCount === null ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>Checking related data...</p>
+            ) : (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
+                This internship has <strong>{deleteCount}</strong> registration{deleteCount === 1 ? '' : 's'}. This is a soft delete —
+                that data stays in the database for audit purposes, but this internship will disappear from every dashboard immediately.
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={() => { setDeleteTarget(null); setDeleteCount(null) }} className="btn btn-secondary" style={{ padding: '8px 16px' }}>
+                Cancel
+              </button>
+              <button onClick={handleConfirmDelete} disabled={deleting || deleteCount === null} className="btn btn-danger" style={{ padding: '8px 20px' }}>
+                {deleting ? 'Deleting...' : 'Delete Internship'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

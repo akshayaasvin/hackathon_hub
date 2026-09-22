@@ -16,6 +16,7 @@ export async function GET() {
          is_paid, fee, currency, assessment_enabled, banner_url`
       )
       .eq('status', 'published')
+      .is('deleted_at', null)
       .order('application_deadline', { ascending: true, nullsFirst: false })
     if (error) throw error
 
