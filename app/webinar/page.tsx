@@ -23,6 +23,7 @@ export default async function WebinarPage({ searchParams }: { searchParams: { w?
       .from('webinars')
       .select('id, title, description, starts_at, fee, currency, questions')
       .eq('status', 'published')
+      .is('deleted_at', null)
       .order('starts_at', { ascending: true, nullsFirst: false })
     if (error) throw error
     webinars = (data ?? []).map((w: any) => ({

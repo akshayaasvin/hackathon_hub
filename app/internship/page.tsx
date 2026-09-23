@@ -42,6 +42,7 @@ async function loadInternships(): Promise<{ internships: ListedInternship[]; fai
       .from('internships')
       .select('id, title, topic, description, duration_text, mode, is_paid, fee, currency, eligibility_text, start_date, application_deadline, seats_total, banner_url')
       .eq('status', 'published')
+      .is('deleted_at', null)
       .order('application_deadline', { ascending: true, nullsFirst: false })
     if (error) throw error
 
