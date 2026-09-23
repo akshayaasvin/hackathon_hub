@@ -279,6 +279,10 @@ h1, h2, h3, h4, h5, h6 {
 
 .navbar-actions { display: flex; align-items: center; gap: 12px; }
 
+/* Mobile-only header controls (notification bell + hamburger) — hidden on desktop, where
+   .navbar-actions already shows everything inline. Shown via the ≤768px media query below. */
+.navbar-mobile-actions { display: none; align-items: center; gap: 8px; }
+
 /* ── WEBINAR HIGHLIGHTS (header button, hero pill, home section) ── */
 @keyframes livePulse {
   0%   { box-shadow: 0 0 0 0 rgba(0, 196, 122, 0.55); }
@@ -719,6 +723,8 @@ body.body-landing-light {
   .navbar-container { height: 56px !important; padding: 0 14px !important; }
   .mobile-drawer-overlay { top: 56px !important; }
   .navbar-desktop-links { display: none !important; }
+  .navbar-actions { display: none !important; }
+  .navbar-mobile-actions { display: flex !important; }
   .hamburger-btn { display: block !important; }
   .premium-container { padding: 20px 14px !important; }
   /* Reserves clearance below every page's content so the fixed WhatsApp

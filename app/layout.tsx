@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { Menu, X } from 'lucide-react'
 import { createClient, signOutAndRedirect } from '@/lib/supabase/client'
 import NotificationBell from '@/components/NotificationBell'
 import WhatsAppButton from '@/components/WhatsAppButton'
@@ -12,7 +13,13 @@ import './globals.css'
 function Navbar() {
   const pathname = usePathname()
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false)
+  const [isMobileOpen, setIsMobileOpen] = useState(false)
   const supabase = createClient()
+
+  // Close the mobile drawer on every route change, so it never stays open over the next page.
+  useEffect(() => {
+    setIsMobileOpen(false)
+  }, [pathname])
 
   useEffect(() => {
     // A one-time getUser() on mount used to be the only check here, so the
@@ -67,6 +74,9 @@ function Navbar() {
           <span className="wm-hack">Hackathon</span><span className="wm-hub">Hub</span>
         </span>
       </Link>
+      {/* Desktop: everything inline. Hidden ≤768px (see globals.css) in favor of the
+          hamburger + drawer below — this is what was previously missing on mobile,
+          causing Internships/Webinars/auth buttons to overflow the header. */}
       <div className="navbar-actions">
         <Link
           href="/internship"
@@ -111,6 +121,56 @@ function Navbar() {
           </>
         )}
       </div>
+
+      {/* Mobile only: notification bell stays reachable at a glance; everything else moves
+          into the hamburger drawer instead of being crammed into one row. */}
+      <div className="navbar-mobile-actions">
+        {isLoggedIn && <NotificationBell />}
+        <button
+          className="hamburger-btn"
+          onClick={() => setIsMobileOpen((v) => !v)}
+          aria-label={isMobileOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={isMobileOpen}
+        >
+          {isMobileOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+      </div>
+
+      {isMobileOpen && (
+        <div className="mobile-drawer-overlay" onClick={() => setIsMobileOpen(false)}>
+          <div className="mobile-drawer" onClick={(e) => e.stopPropagation()}>
+            <Link href="/internship" className={`mobile-drawer-link ${pathname.startsWith('/internship') ? 'active' : ''}`}>
+              Internships
+            </Link>
+            <Link href="/webinar" className={`mobile-drawer-link ${pathname === '/webinar' ? 'active' : ''}`}>
+              <span className="live-dot" aria-hidden="true" style={{ marginRight: '8px' }} />
+              Webinars
+            </Link>
+            <div style={{ height: '1px', background: 'var(--border-color)', margin: '8px 0' }} />
+            {isLoggedIn ? (
+              <button
+                onClick={() => {
+                  setIsMobileOpen(false)
+                  signOutAndRedirect('/')
+                }}
+                className="mobile-drawer-link"
+                style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontFamily: 'inherit' }}
+              >
+                Logout
+              </button>
+            ) : (
+              <>
+                <Link href="/register" className="mobile-drawer-link">
+                  Register
+                </Link>
+                <Link href="/login" className="mobile-drawer-link active">
+                  Login
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </nav>
   )
 }
