@@ -212,7 +212,24 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ══════════════════════════════════════════════════════
    NAVBAR
+   Desktop and mobile are two fully separate layouts, toggled purely by the
+   ≤768px media query at the bottom of this section — neither shares layout
+   rules with the other, and only one of (.navbar-actions, .navbar-mobile-menu)
+   is ever visible at a given width.
 ══════════════════════════════════════════════════════ */
+
+/* <header>: the sticky, always-on-top positioning root. Everything below it
+   (the nav row AND the mobile menu it opens) is positioned relative to this
+   element, never to the hero section or <body>. isolation:isolate guarantees
+   its z-index genuinely wins against page content regardless of what other
+   stacking contexts exist further down the page. */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  isolation: isolate;
+}
+
 .navbar-container {
   height: 64px;
   background: rgba(255, 255, 255, 0.82);
@@ -223,14 +240,9 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  position: sticky;
-  top: 0;
-  z-index: 999;
   box-shadow: 0 1px 0 rgba(108,71,255,0.06);
   transition: var(--transition-smooth);
 }
-
-.navbar-logo-section { display: flex; align-items: center; gap: 32px; height: 100%; }
 
 /* Logo link – no gradient text, uses SVG+wordmark */
 .navbar-logo-link {
@@ -251,37 +263,76 @@ h1, h2, h3, h4, h5, h6 {
 .navbar-logo-wordmark .wm-hack { color: var(--primary); }
 .navbar-logo-wordmark .wm-hub  { color: var(--text-primary); }
 
-.navbar-desktop-links { display: flex; gap: 4px; align-items: center; }
-.navbar-desktop-link {
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
-  padding: 8px 14px;
-  border-radius: 8px;
-  transition: var(--transition-smooth);
-  position: relative;
-}
-.navbar-desktop-link::after {
-  content: '';
-  position: absolute;
-  bottom: 4px; left: 50%;
-  width: 0; height: 2px;
-  background: linear-gradient(90deg, var(--primary), var(--secondary));
-  transition: var(--transition-smooth);
-  transform: translateX(-50%);
-  border-radius: 2px;
-}
-.navbar-desktop-link:hover::after,
-.navbar-desktop-link.active::after { width: 60%; }
-.navbar-desktop-link:hover { color: var(--primary); background: rgba(108,71,255,0.05); }
-.navbar-desktop-link.active { color: var(--primary); font-weight: 600; background: rgba(108,71,255,0.06); }
+/* Wraps the bell + desktop actions + mobile hamburger as one flex item, so
+   .navbar-container's justify-content:space-between still only ever sees two
+   top-level children (logo, everything else). */
+.navbar-right { display: flex; align-items: center; gap: 12px; }
 
+/* ── DESKTOP NAV (≥769px) ── */
 .navbar-actions { display: flex; align-items: center; gap: 12px; }
 
-/* Mobile-only header controls (notification bell + hamburger) — hidden on desktop, where
-   .navbar-actions already shows everything inline. Shown via the ≤768px media query below. */
-.navbar-mobile-actions { display: none; align-items: center; gap: 8px; }
+/* ── MOBILE NAV (≤768px) ──
+   Hamburger toggle lives in the header row; hidden entirely on desktop and
+   shown only inside the ≤768px media query below. */
+.hamburger-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 8px;
+  transition: var(--transition-smooth);
+  min-width: 42px;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+}
+.hamburger-btn:hover { background: var(--primary-glow); }
+
+/* Full-width menu that drops down directly below the header — not a side
+   drawer. Positioned absolute against .site-header (top:100%, left/right:0,
+   width:100%), so it can only ever sit flush under the nav row, never over
+   the hero section. Forced display:none outside the ≤768px media query as a
+   second guarantee (on top of the React state) that it can never render at
+   the same time as the desktop nav. */
+.navbar-mobile-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 999;
+  flex-direction: column;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 16px 32px -16px rgba(108,71,255,0.20);
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+  animation: fadeIn 0.15s ease-out;
+}
+.navbar-mobile-link {
+  display: block;
+  width: 100%;
+  padding: 16px 20px;
+  text-decoration: none;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 15px;
+  font-family: inherit;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+.navbar-mobile-menu > *:last-child { border-bottom: none; }
+.navbar-mobile-link:hover { background: var(--primary-glow); color: var(--primary); }
+.navbar-mobile-link.active { color: var(--primary); font-weight: 700; background: rgba(108,71,255,0.06); }
+.navbar-mobile-logout { color: var(--danger); }
+.navbar-mobile-logout:hover { background: var(--danger-bg); color: var(--danger); }
 
 /* ── WEBINAR HIGHLIGHTS (header button, hero pill, home section) ── */
 @keyframes livePulse {
@@ -329,38 +380,6 @@ h1, h2, h3, h4, h5, h6 {
   padding: 5px 12px; border-radius: 999px; font-size: 11px; font-weight: 800;
   letter-spacing: 0.08em; text-transform: uppercase; color: #fff; background: #6C47FF;
 }
-
-.hamburger-btn { display: none; background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 10px; border-radius: 8px; transition: var(--transition-smooth); min-width: 42px; min-height: 42px; }
-.hamburger-btn:hover { background: var(--primary-glow); }
-
-/* Mobile Drawer */
-.mobile-drawer-overlay {
-  position: fixed; top: 64px; left: 0; right: 0; bottom: 0;
-  background: rgba(10,14,26,0.25);
-  backdrop-filter: blur(6px);
-  z-index: 998;
-  display: flex; justify-content: flex-end;
-  animation: fadeIn 0.2s ease-out;
-}
-.mobile-drawer {
-  width: 260px; height: 100%;
-  background: rgba(255,255,255,0.96);
-  border-left: 1px solid var(--border-color);
-  padding: 20px;
-  display: flex; flex-direction: column; gap: 8px;
-  box-shadow: -8px 0 24px rgba(108,71,255,0.06);
-  animation: slideInRight 0.28s cubic-bezier(0.16,1,0.3,1);
-}
-.mobile-drawer-link {
-  display: block; padding: 11px 14px; border-radius: 8px;
-  text-decoration: none; color: var(--text-secondary);
-  font-weight: 500; font-size: 14px;
-  transition: var(--transition-smooth);
-}
-.mobile-drawer-link:hover { background: var(--primary-glow); color: var(--primary); }
-.mobile-drawer-link.active { background: rgba(108,71,255,0.08); color: var(--primary); font-weight: 600; }
-
-@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
 /* ══════════════════════════════════════════════════════
    HERO BACKGROUND – WHITE TECH THEME
@@ -721,11 +740,9 @@ body.body-landing-light {
 ══════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
   .navbar-container { height: 56px !important; padding: 0 14px !important; }
-  .mobile-drawer-overlay { top: 56px !important; }
-  .navbar-desktop-links { display: none !important; }
   .navbar-actions { display: none !important; }
-  .navbar-mobile-actions { display: flex !important; }
-  .hamburger-btn { display: block !important; }
+  .hamburger-btn { display: flex !important; }
+  .navbar-mobile-menu { display: flex !important; }
   .premium-container { padding: 20px 14px !important; }
   /* Reserves clearance below every page's content so the fixed WhatsApp
      button (bottom-right, ~56px + margin) never sits on top of whatever
@@ -786,10 +803,6 @@ body.body-landing-light {
 @media (max-width: 480px) {
   .stats-grid { grid-template-columns: 1fr !important; }
   .navbar-logo-wordmark { font-size: 16px !important; }
-  .navbar-actions { gap: 6px !important; }
-  .navbar-actions .btn { padding: 5px 10px !important; font-size: 12px !important; }
-  .navbar-actions .navbar-webinar-link { padding: 6px 10px !important; font-size: 12px !important; gap: 6px !important; }
-  .navbar-actions .navbar-plain-link { font-size: 12px !important; }
   .webinar-section-card { padding: 24px 14px 8px !important; }
   .navbar-container { gap: 4px; }
 }
