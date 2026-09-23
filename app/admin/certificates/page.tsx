@@ -19,7 +19,7 @@ export default function AdminCertificatesPage() {
       setLoading(true)
       const [certsRes, hacksRes, usersRes] = await Promise.all([
         supabase.from('certificates').select('*'),
-        supabase.from('hackathons').select('*'),
+        supabase.from('hackathons').select('*').is('deleted_at', null),
         supabase.from('users').select('*')
       ])
 

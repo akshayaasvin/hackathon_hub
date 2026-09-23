@@ -37,7 +37,7 @@ export default function AdminUsersPage() {
         supabase.from('users').select('*'),
         supabase.from('participant_profiles').select('user_id, college_name, date_of_birth'),
         supabase.from('college_profiles').select('user_id, college_name'),
-        supabase.from('hackathons').select('id, name').order('created_at', { ascending: false }),
+        supabase.from('hackathons').select('id, name').is('deleted_at', null).order('created_at', { ascending: false }),
         supabase.from('registrations').select('user_id, hackathon_id'),
       ])
 

@@ -20,7 +20,7 @@ export default function AdminSubmissionsPage() {
       const [subsRes, teamsRes, hacksRes] = await Promise.all([
         supabase.from('submissions').select('*'),
         supabase.from('teams').select('*'),
-        supabase.from('hackathons').select('*')
+        supabase.from('hackathons').select('*').is('deleted_at', null)
       ])
 
       const subsData = subsRes.data || []

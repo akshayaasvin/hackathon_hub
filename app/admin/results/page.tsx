@@ -23,6 +23,7 @@ export default function AdminResultsPage() {
       const { data } = await supabase
         .from('hackathons')
         .select('*')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
       setHackathons(data || [])
     } catch (e) {

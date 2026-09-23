@@ -330,7 +330,7 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: 0.08em; text-transform: uppercase; color: #fff; background: #6C47FF;
 }
 
-.hamburger-btn { display: none; background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 8px; border-radius: 8px; transition: var(--transition-smooth); }
+.hamburger-btn { display: none; background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 10px; border-radius: 8px; transition: var(--transition-smooth); min-width: 42px; min-height: 42px; }
 .hamburger-btn:hover { background: var(--primary-glow); }
 
 /* Mobile Drawer */
