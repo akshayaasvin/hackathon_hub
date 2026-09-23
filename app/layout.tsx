@@ -74,6 +74,20 @@ function Navbar() {
           <span className="wm-hack">Hackathon</span><span className="wm-hub">Hub</span>
         </span>
       </Link>
+      {/* Wraps the bell + both action groups as ONE flex item, so .navbar-container's
+          justify-content:space-between still only ever sees two sides (logo, everything
+          else) — adding the bell as a third top-level child here would otherwise get
+          pushed into the middle of the header instead of sitting next to the actions. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Rendered exactly ONCE regardless of screen width — critical. NotificationBell opens
+            its own Supabase Realtime channel named 'notifications' in a useEffect; mounting it
+            a second time (one copy for desktop, one for mobile, each only hidden by CSS
+            display:none but both still mounted and both subscribing) made the second instance
+            call .channel('notifications').on(...) on a channel the first had already
+            .subscribe()-ed, which Supabase's client throws on — crashing the whole app for
+            every signed-in visitor, not just on mobile. */}
+        {isLoggedIn && <NotificationBell />}
+
       {/* Desktop: everything inline. Hidden ≤768px (see globals.css) in favor of the
           hamburger + drawer below — this is what was previously missing on mobile,
           causing Internships/Webinars/auth buttons to overflow the header. */}
@@ -93,23 +107,20 @@ function Navbar() {
           Webinars
         </Link>
         {isLoggedIn ? (
-          <>
-            <NotificationBell />
-            <button
-              onClick={() => signOutAndRedirect('/')}
-              className="btn"
-              style={{
-                padding: '6px 12px',
-                fontSize: '13px',
-                borderColor: 'var(--danger-border)',
-                color: 'var(--danger)',
-                background: 'var(--danger-bg)',
-                fontWeight: 600
-              }}
-            >
-              Logout
-            </button>
-          </>
+          <button
+            onClick={() => signOutAndRedirect('/')}
+            className="btn"
+            style={{
+              padding: '6px 12px',
+              fontSize: '13px',
+              borderColor: 'var(--danger-border)',
+              color: 'var(--danger)',
+              background: 'var(--danger-bg)',
+              fontWeight: 600
+            }}
+          >
+            Logout
+          </button>
         ) : (
           <>
             <Link href="/register" className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: '13px' }}>
@@ -122,10 +133,9 @@ function Navbar() {
         )}
       </div>
 
-      {/* Mobile only: notification bell stays reachable at a glance; everything else moves
-          into the hamburger drawer instead of being crammed into one row. */}
+      {/* Mobile only: the hamburger toggle itself (NotificationBell is now rendered once,
+          above, outside this group, so it shows on both layouts without duplicating it). */}
       <div className="navbar-mobile-actions">
-        {isLoggedIn && <NotificationBell />}
         <button
           className="hamburger-btn"
           onClick={() => setIsMobileOpen((v) => !v)}
@@ -135,14 +145,36 @@ function Navbar() {
           {isMobileOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
       </div>
+      </div>
 
+      {/* Inline styles here are deliberate, on top of the .mobile-drawer-overlay/.mobile-drawer
+          classes already in globals.css: they guarantee the overlay sits above the page
+          content and the panel renders as a solid, right-aligned card even if anything about
+          the external stylesheet's cascade/load order ever changes — this must never again
+          render as bare, unstyled text over the page. */}
       {isMobileOpen && (
-        <div className="mobile-drawer-overlay" onClick={() => setIsMobileOpen(false)}>
-          <div className="mobile-drawer" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="mobile-drawer-overlay"
+          onClick={() => setIsMobileOpen(false)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2000,
+            background: 'rgba(10,14,26,0.45)', display: 'flex', justifyContent: 'flex-end',
+          }}
+        >
+          <div
+            className="mobile-drawer"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '260px', maxWidth: '80vw', height: '100%', background: '#ffffff',
+              borderLeft: '1px solid var(--border-color)', padding: '80px 16px 24px',
+              display: 'flex', flexDirection: 'column', gap: '4px',
+              boxShadow: '-8px 0 24px rgba(108,71,255,0.12)',
+            }}
+          >
             <Link href="/internship" className={`mobile-drawer-link ${pathname.startsWith('/internship') ? 'active' : ''}`}>
               Internships
             </Link>
-            <Link href="/webinar" className={`mobile-drawer-link ${pathname === '/webinar' ? 'active' : ''}`}>
+            <Link href="/webinar" className={`mobile-drawer-link ${pathname === '/webinar' ? 'active' : ''}`} style={{ display: 'flex', alignItems: 'center' }}>
               <span className="live-dot" aria-hidden="true" style={{ marginRight: '8px' }} />
               Webinars
             </Link>
@@ -154,7 +186,7 @@ function Navbar() {
                   signOutAndRedirect('/')
                 }}
                 className="mobile-drawer-link"
-                style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontFamily: 'inherit' }}
+                style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontFamily: 'inherit', fontSize: '14px' }}
               >
                 Logout
               </button>
