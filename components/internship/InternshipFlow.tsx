@@ -285,7 +285,7 @@ export default function InternshipFlow({ internshipId, autoStart }: { internship
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><CalendarDays size={15} /> Ends {formatDateDMY(details.endDate)}</span>
           )}
           {details.applicationDeadline && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><CalendarDays size={15} /> Apply by {formatDateDMY(details.applicationDeadline)}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><CalendarDays size={15} /> Application deadline {formatDateDMY(details.applicationDeadline)}</span>
           )}
           {details.seatsAvailable != null && (
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Users size={15} /> {details.seatsAvailable} seat{details.seatsAvailable === 1 ? '' : 's'} available</span>
