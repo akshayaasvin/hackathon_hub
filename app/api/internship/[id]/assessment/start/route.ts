@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizeIndianMobile } from '@/lib/phone'
 import { parseAssessmentQuestions, toPublicQuestion } from '@/lib/internshipAssessment'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
+import { isPastApplicationDeadlineIST } from '@/lib/dates'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -35,7 +36,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const admin = createAdminClient()
     const { data: internship, error: internshipError } = await admin
       .from('internships')
-      .select('id, status, assessment_enabled, assessment_time_limit_minutes, assessment_questions, deleted_at')
+      .select('id, status, assessment_enabled, assessment_time_limit_minutes, assessment_questions, application_deadline, deleted_at')
       .eq('id', params.id)
       .maybeSingle()
     if (internshipError) throw internshipError
@@ -55,6 +56,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     if (existing && !['applied', 'assessment_pending', 'not_eligible'].includes(existing.status)) {
       return apiError('This email has already applied for this internship.', 409)
+    }
+
+    // Block brand-new attempts once the deadline has passed, but let someone who genuinely
+    // already started (assessment_started_at set, before the deadline) finish and submit —
+    // the time-limit check in submit/route.ts is what actually caps how long they get.
+    if (!existing?.assessment_started_at && isPastApplicationDeadlineIST(internship.application_deadline)) {
+      return apiError('Applications for this internship are closed.', 400)
     }
 
     const accessToken = crypto.randomUUID()

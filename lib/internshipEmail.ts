@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail, renderInternshipEmail } from '@/lib/email'
+import { durationBetween, formatDateDMY } from '@/lib/dates'
 
 /**
  * Sends the automatic confirmation email (section 9/10) for one internship registration,
@@ -14,7 +15,7 @@ export async function sendInternshipConfirmation(admin: SupabaseClient, registra
     .select(
       `id, registration_code, full_name, email, status, assessment_score, assessment_total, assessment_passed,
        payment_id, amount,
-       internship:internships(title, topic, start_date, duration_text, is_paid, email_subject, email_heading,
+       internship:internships(title, topic, start_date, end_date, duration_text, is_paid, email_subject, email_heading,
          email_body, email_cta_text, email_cta_link, email_instructions, email_support_contact)`
     )
     .eq('id', registrationId)
@@ -54,8 +55,8 @@ export async function sendInternshipConfirmation(admin: SupabaseClient, registra
       assessment_score: data.assessment_score != null ? `${data.assessment_score}/${data.assessment_total}` : 'N/A',
       eligibility_status: eligibilityStatus,
       payment_status: paymentStatus,
-      start_date: internship.start_date || 'To be announced',
-      duration: internship.duration_text || 'To be announced',
+      start_date: internship.start_date ? formatDateDMY(internship.start_date) : 'To be announced',
+      duration: durationBetween(internship.start_date, internship.end_date) || internship.duration_text || 'To be announced',
       next_steps: 'Watch your inbox for updates from the internship team, and keep your Registration ID for reference.',
       internship_link: internshipLink,
     }

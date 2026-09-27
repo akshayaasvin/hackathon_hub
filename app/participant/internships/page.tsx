@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Briefcase, CalendarDays } from 'lucide-react'
+import { formatDateDMY } from '@/lib/dates'
 
 interface MyRegistration {
   registrationId: string
@@ -88,7 +89,7 @@ export default function MyInternshipsPage() {
                   {r.internship?.mode && <div style={{ textTransform: 'capitalize' }}>Mode: {r.internship.mode}</div>}
                   {r.internship?.startDate && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <CalendarDays size={13} /> Starts {new Date(r.internship.startDate).toLocaleDateString()}
+                      <CalendarDays size={13} /> Starts {formatDateDMY(r.internship.startDate)}
                     </div>
                   )}
                   {r.assessmentTotal != null && r.assessmentTotal > 0 && (
