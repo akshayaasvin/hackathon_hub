@@ -108,22 +108,33 @@ export function istDateRangeToUTC(fromISO: string, toISO: string): { gte: string
   }
 }
 
-/** timestamptz ISO string → 'DD/MM/YYYY HH:mm' rendered in Asia/Kolkata, for exports. */
+/**
+ * timestamptz ISO string → 'DD/MM/YYYY HH:mm' rendered in Asia/Kolkata, for exports. The only
+ * function in this file that touches `Intl` with an explicit IANA zone — on a runtime with
+ * reduced ICU data (stripped-down embedded browsers/webviews) that can throw a RangeError, so
+ * it's wrapped rather than left to crash whatever called it. Every other function here is
+ * pure string/number math and cannot throw regardless of input.
+ */
 export function formatDateTimeDMY_IST(value: string | null | undefined): string {
   if (!value) return ''
   const d = new Date(value)
   if (Number.isNaN(d.getTime())) return ''
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(d)
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
-  return `${get('day')}/${get('month')}/${get('year')} ${get('hour')}:${get('minute')}`
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(d)
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+    return `${get('day')}/${get('month')}/${get('year')} ${get('hour')}:${get('minute')}`
+  } catch (err) {
+    console.error('[lib/dates] formatDateTimeDMY_IST failed, falling back:', err)
+    return ''
+  }
 }
 
 /**
