@@ -153,7 +153,7 @@ export default async function InternshipListPage() {
                     )}
                     {i.application_deadline && (
                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Calendar size={14} /> Apply by {formatDateDMY(i.application_deadline)}
+                        <Calendar size={14} /> Application deadline {formatDateDMY(i.application_deadline)}
                       </span>
                     )}
                     {i.seatsAvailable != null && (

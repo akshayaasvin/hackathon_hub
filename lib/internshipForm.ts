@@ -115,62 +115,65 @@ export function parseFormConfig(raw: unknown): FormConfig {
 const isEmpty = (v: unknown) =>
   v === undefined || v === null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0)
 
+// Bare reason only, no label prefix — validateRegistrationAnswers below attaches each message
+// to its field's id in a fieldErrors map, and the caller (the registration form, both client
+// and server side) already knows the field's label from its own config, so repeating it here
+// would double it up ("College Name: College Name: this field is required.").
 function validateOne(
-  label: string,
   type: QuestionType,
   required: boolean,
   v: unknown,
   options?: string[]
 ): { ok: true; value: AnswerValue } | { ok: false; message: string } {
-  const fail = (why: string) => ({ ok: false as const, message: `"${label}": ${why}` })
+  const fail = (why: string) => ({ ok: false as const, message: why })
   if (isEmpty(v)) {
-    if (required) return fail('this field is required.')
+    if (required) return fail('This field is required.')
     return { ok: true, value: '' }
   }
   switch (type) {
     case 'text':
     case 'paragraph': {
-      if (typeof v !== 'string') return fail('invalid answer.')
+      if (typeof v !== 'string') return fail('Invalid answer.')
       const max = type === 'text' ? 300 : 2000
       const value = v.trim()
-      if (value.length > max) return fail(`please keep this under ${max} characters.`)
+      if (value.length > max) return fail(`Please keep this under ${max} characters.`)
       return { ok: true, value }
     }
     case 'number': {
       const s = String(v).trim()
-      if (!/^-?\d{1,15}(\.\d{1,6})?$/.test(s)) return fail('enter a valid number.')
+      if (!/^-?\d{1,15}(\.\d{1,6})?$/.test(s)) return fail('Enter a valid number.')
       return { ok: true, value: s }
     }
     case 'year': {
       const s = String(v).trim()
       const n = Number(s)
-      if (!/^\d{4}$/.test(s) || n < YEAR_MIN || n > YEAR_MAX) return fail(`enter a year between ${YEAR_MIN} and ${YEAR_MAX}.`)
+      if (!/^\d{4}$/.test(s) || n < YEAR_MIN || n > YEAR_MAX) return fail(`Enter a year between ${YEAR_MIN} and ${YEAR_MAX}.`)
       return { ok: true, value: s }
     }
     case 'date': {
       const s = String(v).trim()
       const d = new Date(s + 'T00:00:00Z')
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) return fail('enter a valid date.')
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) return fail('Enter a valid date.')
       const year = d.getUTCFullYear()
-      if (year < 1900 || year > YEAR_MAX) return fail('enter a valid date.')
+      if (year < 1900 || year > YEAR_MAX) return fail('Enter a valid date.')
       return { ok: true, value: s }
     }
     case 'url': {
       const s = String(v).trim()
-      if (s.length > 500 || !/^https?:\/\/[^\s]+\.[^\s]+$/i.test(s)) return fail('enter a valid link starting with http:// or https://')
+      if (s.length > 500 || !/^https?:\/\/[^\s]+\.[^\s]+$/i.test(s)) return fail('Enter a valid link starting with http:// or https://')
       return { ok: true, value: s }
     }
     case 'radio':
     case 'dropdown': {
-      if (typeof v !== 'string' || !options?.includes(v)) return fail('choose one of the listed options.')
+      if (typeof v !== 'string' || !options?.includes(v)) return fail('Choose one of the listed options.')
       return { ok: true, value: v }
     }
     case 'checkbox': {
-      if (!Array.isArray(v) || v.some((x) => typeof x !== 'string' || !options?.includes(x))) return fail('choose only from the listed options.')
+      if (!Array.isArray(v) || v.some((x) => typeof x !== 'string' || !options?.includes(x))) return fail('Choose only from the listed options.')
       return { ok: true, value: v.filter((x, i) => v.indexOf(x) === i) as string[] }
     }
     default:
-      return { ok: false, message: `"${label}": unsupported field.` }
+      return { ok: false, message: 'This field type is not supported.' }
   }
 }
 
@@ -179,23 +182,33 @@ function validateOne(
  * {fieldOrQuestionId: value} object from the browser. Returns the fixed-field values (for
  * the dedicated columns / prefill use) and the full answers snapshot (fixed + custom) to
  * store in internship_registrations.form_answers.
+ *
+ * On failure, collects EVERY invalid field into `fieldErrors` (keyed by fixed-field key or
+ * question id) rather than stopping at the first one — the registration form shows all of
+ * them inline at once and scrolls to the first, instead of forcing one fix-and-resubmit round
+ * trip per error. This same function runs on the server (source of truth) and, unchanged, on
+ * the client for instant feedback before a submission is ever sent.
  */
 export function validateRegistrationAnswers(
   config: FormConfig,
   raw: unknown
 ):
   | { ok: true; fixedValues: Record<string, AnswerValue>; answers: StoredAnswer[] }
-  | { ok: false; message: string } {
+  | { ok: false; fieldErrors: Record<string, string> } {
   const input: Record<string, unknown> = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as any) : {}
   const fixedValues: Record<string, AnswerValue> = {}
   const answers: StoredAnswer[] = []
+  const fieldErrors: Record<string, string> = {}
 
   for (const f of config.fixedFields) {
     const def = fixedFieldDef(f.key)
     if (!def || def.type === 'resume') continue // resume is handled separately (file upload)
     const optionList = 'options' in def ? [...def.options] : undefined
-    const result = validateOne(def.label, def.type, f.required, input[f.key], optionList)
-    if (result.ok === false) return result
+    const result = validateOne(def.type, f.required, input[f.key], optionList)
+    if (result.ok === false) {
+      fieldErrors[f.key] = result.message
+      continue
+    }
     if (result.value !== '') {
       fixedValues[f.key] = result.value
       answers.push({ id: f.key, label: def.label, type: def.type, value: result.value })
@@ -203,11 +216,15 @@ export function validateRegistrationAnswers(
   }
 
   for (const q of config.questions) {
-    const result = validateOne(q.label, q.type, q.required, input[q.id], q.options)
-    if (result.ok === false) return result
+    const result = validateOne(q.type, q.required, input[q.id], q.options)
+    if (result.ok === false) {
+      fieldErrors[q.id] = result.message
+      continue
+    }
     if (result.value !== '') answers.push({ id: q.id, label: q.label, type: q.type, value: result.value })
   }
 
+  if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors }
   return { ok: true, fixedValues, answers }
 }
 

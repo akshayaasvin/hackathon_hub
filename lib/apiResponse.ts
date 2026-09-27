@@ -17,7 +17,13 @@ export function apiSuccess<T>(data?: T, message = 'Success', status = 200) {
   return NextResponse.json({ success: true, message, data: data ?? null }, { status, headers: NO_STORE })
 }
 
-/** Standard error envelope: { success: false, message }. Always valid JSON, never cached. */
-export function apiError(message: string, status = 400) {
-  return NextResponse.json({ success: false, message }, { status, headers: NO_STORE })
+/**
+ * Standard error envelope: { success: false, message, fieldErrors? }. Always valid JSON,
+ * never cached. `fieldErrors` is optional and additive — omitted entirely unless a caller
+ * passes it, so every existing apiError(message, status) call site is unaffected. A caller
+ * that DOES pass it (e.g. internship registration validation) lets the form show each error
+ * next to its own field instead of only a generic top-of-form message.
+ */
+export function apiError(message: string, status = 400, fieldErrors?: Record<string, string>) {
+  return NextResponse.json({ success: false, message, ...(fieldErrors ? { fieldErrors } : {}) }, { status, headers: NO_STORE })
 }

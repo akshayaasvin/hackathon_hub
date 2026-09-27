@@ -10,6 +10,7 @@ import { uploadResume } from '@/lib/internshipResume'
 import { sendInternshipConfirmation } from '@/lib/internshipEmail'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
 import { isPastApplicationDeadlineIST } from '@/lib/dates'
+import { zodFieldErrors } from '@/lib/zodError'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -40,10 +41,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
       return apiError('Invalid request body — expected JSON.', 400)
     }
     const parsed = bodySchema.safeParse(body)
-    if (!parsed.success) return apiError(parsed.error.issues[0]?.message || 'Invalid input', 400)
+    if (!parsed.success) return apiError('Please fix the highlighted fields.', 400, zodFieldErrors(parsed.error))
 
     const phone = normalizeIndianMobile(parsed.data.phone)
-    if (!phone) return apiError('Enter a valid 10-digit mobile number.', 400)
+    if (!phone) return apiError('Enter a valid 10-digit mobile number.', 400, { phone: 'Enter a valid 10-digit mobile number.' })
     const email = parsed.data.email.trim().toLowerCase()
     const fullName = parsed.data.fullName
 
@@ -59,8 +60,10 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const formConfig = parseFormConfig(internship.form_config)
     const resumeField = formConfig.fixedFields.find((f) => f.key === 'resume')
     const validated = validateRegistrationAnswers(formConfig, parsed.data.fields)
-    if (validated.ok === false) return apiError(validated.message, 400)
-    if (resumeField?.required && !parsed.data.resumeDataUrl) return apiError('Please attach your resume.', 400)
+    if (validated.ok === false) return apiError('Please fix the highlighted fields.', 400, validated.fieldErrors)
+    if (resumeField?.required && !parsed.data.resumeDataUrl) {
+      return apiError('Please attach your resume.', 400, { resume: 'Please attach your resume.' })
+    }
 
     // Best-effort: if the visitor happens to have an active HackathonHub session, link this
     // application to their account — read from the session itself, never from the request
@@ -116,7 +119,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
       if (existingError) throw existingError
 
       if (existing) {
-        if (existing.status === 'registered') return apiError('This email has already registered for this internship.', 409)
+        if (existing.status === 'registered') {
+          return apiError(
+            'This email is already registered for this internship.',
+            409,
+            { email: 'This email is already registered for this internship.' }
+          )
+        }
         registrationId = existing.id
         // Rotate the token for this fresh submission (same pattern as webinar/hackathon
         // registration): whoever is submitting the form right now is who should be able
@@ -130,7 +139,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
           .select('id')
           .single()
         if (insertError) {
-          if ((insertError as any).code === '23505') return apiError('This email has already registered for this internship.', 409)
+          if ((insertError as any).code === '23505') {
+            return apiError(
+              'This email is already registered for this internship.',
+              409,
+              { email: 'This email is already registered for this internship.' }
+            )
+          }
           throw insertError
         }
         registrationId = created.id

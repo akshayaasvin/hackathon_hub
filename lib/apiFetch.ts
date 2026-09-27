@@ -2,6 +2,10 @@ export interface ApiResult<T = any> {
   success: boolean
   message: string
   data?: T
+  // Present only on some error responses (see lib/apiResponse.ts apiError's third argument) —
+  // maps a field/question id to its own error message, for forms that show errors inline
+  // next to each field instead of only a generic top-of-form message.
+  fieldErrors?: Record<string, string>
 }
 
 /**
