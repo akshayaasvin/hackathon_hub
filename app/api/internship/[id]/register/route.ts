@@ -9,6 +9,7 @@ import { normalizeIndianMobile } from '@/lib/phone'
 import { uploadResume } from '@/lib/internshipResume'
 import { sendInternshipConfirmation } from '@/lib/internshipEmail'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
+import { isPastApplicationDeadlineIST } from '@/lib/dates'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -49,7 +50,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const admin = createAdminClient()
     const { data: internship, error: internshipError } = await admin
       .from('internships')
-      .select('id, status, is_paid, fee, currency, assessment_enabled, form_config, deleted_at')
+      .select('id, status, is_paid, fee, currency, assessment_enabled, form_config, application_deadline, deleted_at')
       .eq('id', params.id)
       .maybeSingle()
     if (internshipError) throw internshipError
@@ -97,6 +98,13 @@ export async function POST(request: Request, { params }: { params: { id: string 
       if (row.status === 'registered') return apiError('This application is already registered.', 409)
       registrationId = row.id
     } else {
+      // A brand-new application (no existing registrationId/accessToken carried over from a
+      // prior assessment-start/register call) — this is the entry point "applications closed"
+      // must actually block. Anyone already mid-flow (the `if` branch above) necessarily
+      // started before the deadline, since assessment/start enforces the same check.
+      if (isPastApplicationDeadlineIST(internship.application_deadline)) {
+        return apiError('Applications for this internship are closed.', 400)
+      }
       if (internship.assessment_enabled) return apiError('Please complete the eligibility assessment first.', 400)
 
       const { data: existing, error: existingError } = await admin

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { CalendarDays, Search } from 'lucide-react'
 import { postJson } from '@/lib/apiFetch'
+import { formatDateDMY, formatInstantDateDMY_IST } from '@/lib/dates'
 
 interface StatusResult {
   status: string
@@ -107,12 +108,12 @@ export default function InternshipStatusPage() {
             {result.mode && <div style={{ textTransform: 'capitalize' }}>Mode: {result.mode}</div>}
             {result.startDate && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CalendarDays size={14} /> Starts {new Date(result.startDate).toLocaleDateString()}
+                <CalendarDays size={14} /> Starts {formatDateDMY(result.startDate)}
               </div>
             )}
             <div>Eligibility Assessment: {result.assessmentStatus}{result.assessmentTotal ? ` (${result.assessmentScore}/${result.assessmentTotal})` : ''}</div>
             <div>Payment Status: {result.paymentStatus}</div>
-            <div>Applied on: {new Date(result.appliedAt).toLocaleDateString()}</div>
+            <div>Applied on: {formatInstantDateDMY_IST(result.appliedAt)}</div>
           </div>
         </div>
       )}

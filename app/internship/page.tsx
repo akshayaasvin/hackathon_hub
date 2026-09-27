@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { Calendar, Clock, GraduationCap, MapPin, Users } from 'lucide-react'
+import { durationBetween, formatDateDMY, isPastApplicationDeadlineIST } from '@/lib/dates'
 
 // Public page: https://hackathon.adz4needz.com/internship — no login required (section 2/3).
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,7 @@ interface ListedInternship {
   currency: string
   eligibility_text: string | null
   start_date: string | null
+  end_date: string | null
   application_deadline: string | null
   seatsAvailable: number | null
   banner_url: string | null
@@ -40,7 +42,7 @@ async function loadInternships(): Promise<{ internships: ListedInternship[]; fai
     const admin = createAdminClient()
     const { data, error } = await admin
       .from('internships')
-      .select('id, title, topic, description, duration_text, mode, is_paid, fee, currency, eligibility_text, start_date, application_deadline, seats_total, banner_url')
+      .select('id, title, topic, description, duration_text, mode, is_paid, fee, currency, eligibility_text, start_date, end_date, application_deadline, seats_total, banner_url')
       .eq('status', 'published')
       .is('deleted_at', null)
       .order('application_deadline', { ascending: true, nullsFirst: false })
@@ -96,73 +98,89 @@ export default async function InternshipListPage() {
         </div>
       ) : (
         <div className="responsive-card-grid">
-          {internships.map((i) => (
-            <div key={i.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              <div>
-                {i.banner_url && (
-                  <img src={i.banner_url} alt={i.title} style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '10px', marginBottom: '14px' }} />
-                )}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '10px' }}>
-                  <h3 style={{ fontSize: '18px', color: 'var(--text-primary)' }}>{i.title}</h3>
-                  <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: i.is_paid ? 'var(--primary)' : 'var(--success)' }}>
-                    {i.is_paid ? money(i.fee, i.currency) : 'Unpaid'}
-                  </span>
+          {internships.map((i) => {
+            // Duration shown to candidates is calculated from the actual dates whenever both
+            // are set — duration_text is admin free text (e.g. "Flexible") and is only a
+            // fallback for internships without exact start/end dates.
+            const duration = durationBetween(i.start_date, i.end_date) || i.duration_text
+            const closed = isPastApplicationDeadlineIST(i.application_deadline)
+            return (
+              <div key={i.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  {i.banner_url && (
+                    <img src={i.banner_url} alt={i.title} style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '10px', marginBottom: '14px' }} />
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '10px' }}>
+                    <h3 style={{ fontSize: '18px', color: 'var(--text-primary)' }}>{i.title}</h3>
+                    <span style={{ fontWeight: 700, whiteSpace: 'nowrap', color: i.is_paid ? 'var(--primary)' : 'var(--success)' }}>
+                      {i.is_paid ? money(i.fee, i.currency) : 'Unpaid'}
+                    </span>
+                  </div>
+                  {i.topic && <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '10px' }}>{i.topic}</p>}
+                  {i.description && (
+                    <p
+                      style={{
+                        color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.6, marginBottom: '14px',
+                        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      }}
+                    >
+                      {i.description}
+                    </p>
+                  )}
+                  <div style={{ display: 'grid', gap: '6px', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '18px' }}>
+                    {duration && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Clock size={14} /> {duration}
+                      </span>
+                    )}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'capitalize' }}>
+                      <MapPin size={14} /> {i.mode}
+                    </span>
+                    {i.eligibility_text && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <GraduationCap size={14} /> {i.eligibility_text}
+                      </span>
+                    )}
+                    {i.start_date && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Calendar size={14} /> Starts {formatDateDMY(i.start_date)}
+                      </span>
+                    )}
+                    {i.end_date && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Calendar size={14} /> Ends {formatDateDMY(i.end_date)}
+                      </span>
+                    )}
+                    {i.application_deadline && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Calendar size={14} /> Apply by {formatDateDMY(i.application_deadline)}
+                      </span>
+                    )}
+                    {i.seatsAvailable != null && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Users size={14} /> {i.seatsAvailable} seat{i.seatsAvailable === 1 ? '' : 's'} available
+                      </span>
+                    )}
+                  </div>
                 </div>
-                {i.topic && <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '10px' }}>{i.topic}</p>}
-                {i.description && (
-                  <p
-                    style={{
-                      color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.6, marginBottom: '14px',
-                      display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                    }}
-                  >
-                    {i.description}
-                  </p>
+                {closed ? (
+                  <p style={{ color: 'var(--danger)', fontWeight: 600, fontSize: '13px' }}>Applications closed.</p>
+                ) : (
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <Link href={`/internship/${i.id}`} className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }}>
+                      View Details
+                    </Link>
+                    {/* Skips straight past the details screen into the registration/payment
+                        flow — "View Details" still lands on that screen for anyone who wants
+                        to read first (it has its own Register Now button too). */}
+                    <Link href={`/internship/${i.id}?start=1`} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                      Register Now
+                    </Link>
+                  </div>
                 )}
-                <div style={{ display: 'grid', gap: '6px', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '18px' }}>
-                  {i.duration_text && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Clock size={14} /> {i.duration_text}
-                    </span>
-                  )}
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'capitalize' }}>
-                    <MapPin size={14} /> {i.mode}
-                  </span>
-                  {i.eligibility_text && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <GraduationCap size={14} /> {i.eligibility_text}
-                    </span>
-                  )}
-                  {i.start_date && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Calendar size={14} /> Starts {new Date(i.start_date).toLocaleDateString()}
-                    </span>
-                  )}
-                  {i.application_deadline && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Calendar size={14} /> Apply by {new Date(i.application_deadline).toLocaleDateString()}
-                    </span>
-                  )}
-                  {i.seatsAvailable != null && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Users size={14} /> {i.seatsAvailable} seat{i.seatsAvailable === 1 ? '' : 's'} available
-                    </span>
-                  )}
-                </div>
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <Link href={`/internship/${i.id}`} className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }}>
-                  View Details
-                </Link>
-                {/* Skips straight past the details screen into the registration/payment
-                    flow — "View Details" still lands on that screen for anyone who wants
-                    to read first (it has its own Register Now button too). */}
-                <Link href={`/internship/${i.id}?start=1`} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
-                  Register Now
-                </Link>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

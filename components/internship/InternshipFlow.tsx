@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { CalendarDays, CheckCircle2, Clock, GraduationCap, Loader2, MapPin, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { durationBetween, formatDateDMY, isPastApplicationDeadlineIST } from '@/lib/dates'
 import CopyLinkButton from '@/components/webinar/CopyLinkButton'
 import { openRazorpayCheckout, verifyPaymentOnServer, type RazorpayCheckoutResult } from '@/components/RazorpayCheckout'
 import AssessmentRunner from './AssessmentRunner'
@@ -20,6 +21,7 @@ interface InternshipDetails {
   durationText: string | null
   mode: string
   startDate: string | null
+  endDate: string | null
   applicationDeadline: string | null
   seatsAvailable: number | null
   isPaid: boolean
@@ -74,9 +76,11 @@ export default function InternshipFlow({ internshipId, autoStart }: { internship
         }
         setDetails(json.data)
         // "Register Now" from the list page (?start=1) skips straight past the details
-        // screen into the flow — unless seats are full, in which case there's nothing to start.
+        // screen into the flow — unless seats are full or applications are closed, in which
+        // case there's nothing to start and 'details' is what shows that message.
         const seatsFull = json.data.seatsAvailable != null && json.data.seatsAvailable <= 0
-        setPhase(autoStart && !seatsFull ? (json.data.assessment?.enabled ? 'assessment' : 'registration') : 'details')
+        const closed = isPastApplicationDeadlineIST(json.data.applicationDeadline)
+        setPhase(autoStart && !seatsFull && !closed ? (json.data.assessment?.enabled ? 'assessment' : 'registration') : 'details')
       })
       .catch(() => {
         if (!cancelled) {
@@ -250,6 +254,8 @@ export default function InternshipFlow({ internshipId, autoStart }: { internship
 
   // 'details'
   const seatsFull = details.seatsAvailable != null && details.seatsAvailable <= 0
+  const duration = durationBetween(details.startDate, details.endDate) || details.durationText
+  const applicationsClosed = isPastApplicationDeadlineIST(details.applicationDeadline)
   return (
     <div style={{ display: 'grid', gap: '20px' }}>
       <div className="glass-card" style={{ padding: '32px 24px' }}>
@@ -265,18 +271,21 @@ export default function InternshipFlow({ internshipId, autoStart }: { internship
         {details.topic && <p style={{ color: 'var(--text-muted)', marginBottom: '16px' }}>{details.topic}</p>}
 
         <div style={{ display: 'grid', gap: '8px', fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '18px' }}>
-          {details.durationText && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Clock size={15} /> {details.durationText}</span>
+          {duration && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Clock size={15} /> {duration}</span>
           )}
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'capitalize' }}><MapPin size={15} /> {details.mode}</span>
           {details.eligibilityText && (
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><GraduationCap size={15} /> {details.eligibilityText}</span>
           )}
           {details.startDate && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><CalendarDays size={15} /> Starts {new Date(details.startDate).toLocaleDateString()}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><CalendarDays size={15} /> Starts {formatDateDMY(details.startDate)}</span>
+          )}
+          {details.endDate && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><CalendarDays size={15} /> Ends {formatDateDMY(details.endDate)}</span>
           )}
           {details.applicationDeadline && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><CalendarDays size={15} /> Apply by {new Date(details.applicationDeadline).toLocaleDateString()}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><CalendarDays size={15} /> Apply by {formatDateDMY(details.applicationDeadline)}</span>
           )}
           {details.seatsAvailable != null && (
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Users size={15} /> {details.seatsAvailable} seat{details.seatsAvailable === 1 ? '' : 's'} available</span>
@@ -295,7 +304,9 @@ export default function InternshipFlow({ internshipId, autoStart }: { internship
           </div>
         )}
 
-        {seatsFull ? (
+        {applicationsClosed ? (
+          <p style={{ color: 'var(--danger)', fontWeight: 600 }}>Applications for this internship are closed.</p>
+        ) : seatsFull ? (
           <p style={{ color: 'var(--danger)', fontWeight: 600 }}>All seats for this internship are currently filled.</p>
         ) : (
           <button
