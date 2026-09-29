@@ -1,12 +1,22 @@
 import { Check } from 'lucide-react'
 import type { RegistrationStatusValue } from './RegistrationStatusChip'
 
-const STAGES = ['Register', 'Pay', 'Approval', 'Team', 'Submit'] as const
+const STAGES = ['Register', 'Pay', 'Approval', 'Team', 'Round 1', 'Round 2', 'Result'] as const
 
-// Maps every registration status onto a 0-4 index into STAGES (which stage
-// is "current"). rejected sits back at the Pay stage since the participant
-// needs to retry payment.
-function stageIndex(status: RegistrationStatusValue): number {
+// Round-specific progress (Phase 4) — registration.status alone only ever says "team_created"
+// once a team exists; it has no idea whether Round 1/2 have happened, since those live in
+// submissions/team_round_status instead. Optional so a caller with no round context yet still
+// gets a sensible stepper (rests at "Team").
+export interface RoundProgress {
+  round1Submitted?: boolean
+  shortlisted?: boolean | null // null/undefined = Round 1 results not published yet
+  round2Submitted?: boolean
+  finalPublished?: boolean
+}
+
+// Maps status (+ round progress once there's a team) onto a 0-6 index into STAGES. rejected
+// sits back at the Pay stage since the participant needs to retry payment.
+function stageIndex(status: RegistrationStatusValue, round?: RoundProgress): number {
   switch (status) {
     case 'not_registered':
       return -1
@@ -19,21 +29,25 @@ function stageIndex(status: RegistrationStatusValue): number {
     case 'approved':
       return 2
     case 'team_created':
+    case 'submitted': {
+      if (!round) return 3
+      if (round.finalPublished) return 6
+      if (round.round2Submitted) return 5
+      if (round.round1Submitted || round.shortlisted != null) return 4
       return 3
-    case 'submitted':
-      return 4
+    }
     default:
       return 0
   }
 }
 
-export function HackathonStepper({ status }: { status: RegistrationStatusValue }) {
-  const current = stageIndex(status)
+export function HackathonStepper({ status, round }: { status: RegistrationStatusValue; round?: RoundProgress }) {
+  const current = stageIndex(status, round)
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '8px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '8px', flexWrap: 'wrap', rowGap: '16px' }}>
       {STAGES.map((stage, i) => {
-        const isDone = i < current || status === 'submitted' && i <= current
+        const isDone = i < current || (status === 'submitted' && i <= current)
         const isCurrent = i === current
         const isRejectedHere = status === 'rejected' && i === 1
 

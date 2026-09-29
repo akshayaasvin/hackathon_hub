@@ -1,0 +1,69 @@
+// Shared (client + server) validation for Phase 4's round submissions — no upload/Storage
+// involved anywhere here, every field is a link the server checks the shape of, never fetches
+// or embeds (the app only ever opens these in a new tab: rel="noopener noreferrer").
+
+const PRESENTATION_HOSTS = [
+  'drive.google.com',
+  'docs.google.com',
+  'slides.google.com',
+  'onedrive.live.com',
+  '1drv.ms',
+  'canva.com',
+  'dropbox.com',
+]
+
+function hostAllowed(host: string, allowlist: string[]): boolean {
+  const h = host.toLowerCase()
+  return allowlist.some((allowed) => h === allowed || h.endsWith('.' + allowed))
+}
+
+function parseHttpsUrl(raw: string, maxLen: number): { ok: true; url: string; host: string } | { ok: false; message: string } {
+  const value = raw.trim()
+  if (!value) return { ok: false, message: 'This link is required.' }
+  if (value.length > maxLen) return { ok: false, message: `Link must be under ${maxLen} characters.` }
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    return { ok: false, message: 'Enter a valid link.' }
+  }
+  if (parsed.protocol !== 'https:') return { ok: false, message: 'Link must start with https://' }
+  return { ok: true, url: value, host: parsed.hostname }
+}
+
+/** Round 1: PPT link. Google Drive/Slides, OneDrive, Canva, or Dropbox only, https, max 500 chars. */
+export function validatePresentationUrl(raw: string): { ok: true; url: string } | { ok: false; message: string } {
+  const parsed = parseHttpsUrl(raw, 500)
+  if (parsed.ok === false) return parsed
+  if (!hostAllowed(parsed.host, PRESENTATION_HOSTS)) {
+    return { ok: false, message: 'Link must be a Google Drive, Google Slides, OneDrive, Canva, or Dropbox link.' }
+  }
+  return { ok: true, url: parsed.url }
+}
+
+/** Round 2: GitHub repo URL. */
+export function validateGithubUrl(raw: string): { ok: true; url: string } | { ok: false; message: string } {
+  const parsed = parseHttpsUrl(raw, 500)
+  if (parsed.ok === false) return parsed
+  if (!hostAllowed(parsed.host, ['github.com'])) return { ok: false, message: 'Enter a valid github.com repository link.' }
+  return { ok: true, url: parsed.url }
+}
+
+/** Round 2: live demo URL — any https link (the deployed app itself, so no fixed host list). */
+export function validateLiveDemoUrl(raw: string): { ok: true; url: string } | { ok: false; message: string } {
+  return parseHttpsUrl(raw, 500)
+}
+
+/** Round 2: optional demo video URL — same shape, but empty is allowed (it's optional). */
+export function validateOptionalVideoUrl(raw: string): { ok: true; url: string } | { ok: false; message: string } {
+  if (!raw.trim()) return { ok: true, url: '' }
+  return parseHttpsUrl(raw, 500)
+}
+
+/** Pitch session Meet link — must be a real meet.google.com link, matching the DB check constraint. */
+export function validateMeetUrl(raw: string): { ok: true; url: string } | { ok: false; message: string } {
+  const value = raw.trim()
+  if (!value.startsWith('https://meet.google.com/')) return { ok: false, message: 'Must be a https://meet.google.com/ link.' }
+  if (value.length > 300) return { ok: false, message: 'Link is too long.' }
+  return { ok: true, url: value }
+}

@@ -1,14 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { postJson } from '@/lib/apiFetch'
 import { ArrowLeft, Calendar, Users, Trophy, ShieldCheck } from 'lucide-react'
-import { HackathonStepper } from '@/components/participant/HackathonStepper'
+import { HackathonStepper, type RoundProgress } from '@/components/participant/HackathonStepper'
 import { RegistrationStatusChip, type RegistrationStatusValue } from '@/components/participant/RegistrationStatusChip'
 import { openRazorpayCheckout, verifyPaymentOnServer, type RazorpayCheckoutResult } from '@/components/RazorpayCheckout'
 import { SubmissionModal, type SubmissionFormValues } from '@/components/participant/SubmissionModal'
+import RoundsPanel from '@/components/participant/RoundsPanel'
 
 export default function HackathonDetailPage() {
   const params = useParams()
@@ -22,16 +23,26 @@ export default function HackathonDetailPage() {
   const [registration, setRegistration] = useState<any>(null)
   const [team, setTeam] = useState<any>(null)
   const [teamMembers, setTeamMembers] = useState<any[]>([])
+  const [pendingInvites, setPendingInvites] = useState<any[]>([])
   const [submission, setSubmission] = useState<any>(null)
+  const [roundProgress, setRoundProgress] = useState<RoundProgress | undefined>(undefined)
 
   const [actionLoading, setActionLoading] = useState(false)
   const [showTeamModal, setShowTeamModal] = useState(false)
   const [teamName, setTeamName] = useState('')
+  const [nameAvailability, setNameAvailability] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+  const nameCheckSeq = useRef(0)
   const [showManageModal, setShowManageModal] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [showSubmissionModal, setShowSubmissionModal] = useState(false)
   const [showPayPanel, setShowPayPanel] = useState(false)
   const [verifying, setVerifying] = useState(false)
+  // Real inline confirmations (Phase 3) — window.confirm is overridden app-wide to always
+  // auto-return true (see app/layout.tsx), so it can't be used to actually gate a destructive
+  // action like disbanding a team.
+  const [confirmDisband, setConfirmDisband] = useState(false)
+  const [confirmRemoveUserId, setConfirmRemoveUserId] = useState<string | null>(null)
+  const [transferToUserId, setTransferToUserId] = useState('')
 
   useEffect(() => {
     loadData()
@@ -75,12 +86,47 @@ export default function HackathonDetailPage() {
           setTeamMembers([])
         }
 
-        const { data: submissionData } = await supabase.from('submissions').select('*').eq('team_id', registrationData.team_id).maybeSingle()
+        // Pending invites for this team — leader-only via RLS (team_invites_select_own, see
+        // migration 0030), so this simply returns empty for a non-leader member, which is fine
+        // since only the leader's Manage Team view renders the invite list/actions anyway.
+        const { data: invites } = await supabase
+          .from('team_invites')
+          .select('id, invited_user_id, created_at')
+          .eq('team_id', registrationData.team_id)
+          .eq('status', 'pending')
+        if (invites && invites.length > 0) {
+          const { data: invitedUsers } = await supabase.from('users').select('id, email, full_name').in('id', invites.map((i: any) => i.invited_user_id))
+          setPendingInvites(invites.map((i: any) => ({ ...i, user: invitedUsers?.find((u: any) => u.id === i.invited_user_id) })))
+        } else {
+          setPendingInvites([])
+        }
+
+        // round: 1 explicitly — a team can now have up to two submissions rows (one per
+        // round, migration 0031), so an unfiltered .maybeSingle() here would error once a
+        // team has both. This `submission` state feeds the pre-Phase-4 generic
+        // SubmissionModal/handleSubmitProject flow specifically, which always writes round 1.
+        const { data: submissionData } = await supabase.from('submissions').select('*').eq('team_id', registrationData.team_id).eq('round', 1).maybeSingle()
         setSubmission(submissionData)
+
+        // Round progress for the stepper only (RoundsPanel below does its own, fuller fetch
+        // for the actual forms/cards) — round1Submitted here means "presentation_url set",
+        // not just "a round-1 submissions row exists" (the pre-Phase-4 generic flow above also
+        // writes a round=1 row with no presentation_url at all).
+        const { data: r1 } = await supabase.from('submissions').select('presentation_url').eq('team_id', registrationData.team_id).eq('round', 1).maybeSingle()
+        const { data: r2 } = await supabase.from('submissions').select('id').eq('team_id', registrationData.team_id).eq('round', 2).maybeSingle()
+        const { data: rs1 } = await supabase.from('team_round_status').select('shortlisted').eq('team_id', registrationData.team_id).eq('round', 1).maybeSingle()
+        setRoundProgress({
+          round1Submitted: !!r1?.presentation_url,
+          shortlisted: rs1 ? rs1.shortlisted : null,
+          round2Submitted: !!r2,
+          finalPublished: !!hackathonData.results_published_final,
+        })
       } else {
         setTeam(null)
         setTeamMembers([])
+        setPendingInvites([])
         setSubmission(null)
+        setRoundProgress(undefined)
       }
     } catch (err) {
       console.error('Error loading hackathon detail:', err)
@@ -177,6 +223,31 @@ export default function HackathonDetailPage() {
     }
   }
 
+  // Debounced live availability check (Phase 2, section 2) — a convenience only; the create
+  // call itself re-checks server-side regardless (see /api/teams and migration 0029's unique
+  // index), so a stale "available" here can never actually let a duplicate through.
+  useEffect(() => {
+    if (!showTeamModal || !teamName.trim()) {
+      setNameAvailability('idle')
+      return
+    }
+    const mySeq = ++nameCheckSeq.current
+    setNameAvailability('checking')
+    const t = setTimeout(async () => {
+      let res: any = null
+      try {
+        const r = await fetch(`/api/teams/check-name?hackathonId=${encodeURIComponent(hackathonId)}&name=${encodeURIComponent(teamName.trim())}`)
+        res = await r.json()
+      } catch {
+        res = null
+      }
+      if (mySeq !== nameCheckSeq.current) return // a newer keystroke's check has superseded this one
+      if (res?.success && res.data) setNameAvailability(res.data.available ? 'available' : 'taken')
+      else setNameAvailability('idle')
+    }, 400)
+    return () => clearTimeout(t)
+  }, [teamName, showTeamModal, hackathonId])
+
   const handleCreateTeam = async () => {
     if (!teamName.trim()) {
       alert('Please enter a team name')
@@ -200,18 +271,70 @@ export default function HackathonDetailPage() {
       alert('Please enter an email')
       return
     }
-    const { data: invitedUser } = await supabase.from('users').select('id, email').eq('email', inviteEmail).single()
-    if (!invitedUser) {
-      alert('User not found. Ensure they registered on the portal.')
+    setActionLoading(true)
+    // Server-side: the browser's own session can never resolve someone else's email to a
+    // user row (RLS correctly blocks that), so every eligibility check — account exists,
+    // approved for this hackathon, not already on a team, team not full — runs there too.
+    // See app/api/teams/[teamId]/invite/route.ts and migration 0028 for why.
+    const result = await postJson(`/api/teams/${team.id}/invite`, { email: inviteEmail.trim() })
+    setActionLoading(false)
+    if (!result.success) {
+      alert(result.message)
       return
     }
-    if (teamMembers.some((m) => m.id === invitedUser.id)) {
-      alert('User is already a member of this team.')
-      return
-    }
-    await supabase.from('team_members').insert({ team_id: team.id, user_id: invitedUser.id })
-    alert('Member added to team!')
+    alert(result.message)
     setInviteEmail('')
+    await loadData()
+  }
+
+  const handleRevokeInvite = async (inviteId: string) => {
+    setActionLoading(true)
+    const result = await postJson(`/api/teams/${team.id}/invites/${inviteId}/revoke`, {})
+    setActionLoading(false)
+    if (!result.success) return alert(result.message)
+    alert(result.message)
+    await loadData()
+  }
+
+  const handleRemoveMember = async (userId: string) => {
+    setActionLoading(true)
+    const result: any = await postJson(`/api/teams/${team.id}/members/${userId}`, {})
+    setActionLoading(false)
+    setConfirmRemoveUserId(null)
+    if (!result.success) return alert(result.message)
+    alert(result.message)
+    await loadData()
+  }
+
+  const handleTransferLeadership = async () => {
+    if (!transferToUserId) return
+    setActionLoading(true)
+    const result = await postJson(`/api/teams/${team.id}/transfer-leadership`, { newLeaderId: transferToUserId })
+    setActionLoading(false)
+    if (!result.success) return alert(result.message)
+    alert(result.message)
+    setTransferToUserId('')
+    await loadData()
+  }
+
+  const handleDisbandTeam = async () => {
+    setActionLoading(true)
+    const result = await postJson(`/api/teams/${team.id}/disband`, {})
+    setActionLoading(false)
+    setConfirmDisband(false)
+    if (!result.success) return alert(result.message)
+    alert(result.message)
+    setShowManageModal(false)
+    await loadData()
+  }
+
+  const handleLeaveTeam = async () => {
+    setActionLoading(true)
+    const result = await postJson(`/api/teams/${team.id}/leave`, {})
+    setActionLoading(false)
+    if (!result.success) return alert(result.message)
+    alert(result.message)
+    setShowManageModal(false)
     await loadData()
   }
 
@@ -272,7 +395,7 @@ export default function HackathonDetailPage() {
           <RegistrationStatusChip status={status} />
         </div>
 
-        <HackathonStepper status={status} />
+        <HackathonStepper status={status} round={roundProgress} />
 
         <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '14px', color: 'var(--text-secondary)', margin: '24px 0', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -392,6 +515,10 @@ export default function HackathonDetailPage() {
         )}
       </div>
 
+      {team && (status === 'team_created' || status === 'submitted') && (
+        <RoundsPanel hackathonId={hackathonId} hackathon={hackathon} team={team} isLeader={team.team_lead_id === user?.id} />
+      )}
+
       {/* Create Team Modal */}
       {showTeamModal && (
         <div className="modal-overlay">
@@ -407,10 +534,19 @@ export default function HackathonDetailPage() {
                 onChange={(e) => setTeamName(e.target.value)}
                 className="premium-input"
               />
+              {nameAvailability === 'checking' && (
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>Checking availability…</p>
+              )}
+              {nameAvailability === 'taken' && (
+                <p style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '6px' }}>Team name already taken in this hackathon.</p>
+              )}
+              {nameAvailability === 'available' && (
+                <p style={{ fontSize: '12px', color: 'var(--success)', marginTop: '6px' }}>Available.</p>
+              )}
             </div>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowTeamModal(false)} className="btn btn-secondary" style={{ padding: '8px 16px' }}>Cancel</button>
-              <button onClick={handleCreateTeam} disabled={actionLoading} className="btn btn-primary" style={{ padding: '8px 20px' }}>
+              <button onClick={() => { setShowTeamModal(false); setTeamName(''); setNameAvailability('idle') }} className="btn btn-secondary" style={{ padding: '8px 16px' }}>Cancel</button>
+              <button onClick={handleCreateTeam} disabled={actionLoading || nameAvailability === 'taken'} className="btn btn-primary" style={{ padding: '8px 20px' }}>
                 {actionLoading ? 'Creating...' : 'Create Team'}
               </button>
             </div>
@@ -418,39 +554,124 @@ export default function HackathonDetailPage() {
         </div>
       )}
 
-      {/* Manage Team Modal */}
-      {showManageModal && team && (
-        <div className="modal-overlay">
-          <div className="glass-card" style={{ width: '100%', maxWidth: '520px', padding: '32px' }}>
-            <h2 style={{ fontSize: '20px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>Manage Team: {team.team_name}</h2>
-            <div style={{ marginBottom: '24px' }}>
-              <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Nominate Member via Email</label>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <input
-                  type="email"
-                  placeholder="student@college.edu"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  className="premium-input"
-                />
-                <button onClick={handleInviteMember} className="btn btn-primary" style={{ padding: '0 20px' }}>Invite</button>
+      {/* Manage Team Modal (Phase 3): leader gets invite/remove/revoke/transfer/disband;
+          a regular member gets Leave. */}
+      {showManageModal && team && (() => {
+        const isLeader = team.team_lead_id === user?.id
+        const otherMembers = teamMembers.filter((m) => m.id !== team.team_lead_id)
+        return (
+          <div className="modal-overlay">
+            <div className="glass-card" style={{ width: '100%', maxWidth: '520px', padding: '32px', maxHeight: '85vh', overflowY: 'auto' }}>
+              <h2 style={{ fontSize: '20px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>Manage Team: {team.team_name}</h2>
+
+              {isLeader && (
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Nominate Member via Email</label>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <input
+                      type="email"
+                      placeholder="student@college.edu"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      className="premium-input"
+                    />
+                    <button onClick={handleInviteMember} disabled={actionLoading} className="btn btn-primary" style={{ padding: '0 20px' }}>Invite</button>
+                  </div>
+                </div>
+              )}
+
+              <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '12px' }}>Active Members ({teamMembers.length})</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                {teamMembers.map((m) => {
+                  const memberIsLeader = m.id === team.team_lead_id
+                  return (
+                    <div
+                      key={m.id}
+                      style={{ padding: '10px 14px', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}
+                    >
+                      <div>
+                        <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {m.full_name || 'No Name'}
+                          {memberIsLeader && <span style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 700 }}> · LEADER</span>}
+                        </p>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>{m.email}</p>
+                      </div>
+                      {isLeader && !memberIsLeader && (
+                        confirmRemoveUserId === m.id ? (
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button onClick={() => handleRemoveMember(m.id)} disabled={actionLoading} className="btn btn-danger" style={{ padding: '6px 10px', fontSize: '11px' }}>Confirm</button>
+                            <button onClick={() => setConfirmRemoveUserId(null)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '11px' }}>Cancel</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setConfirmRemoveUserId(m.id)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--danger)' }}>Remove</button>
+                        )
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {isLeader && pendingInvites.length > 0 && (
+                <>
+                  <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '12px' }}>Pending Invites ({pendingInvites.length})</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                    {pendingInvites.map((inv) => (
+                      <div
+                        key={inv.id}
+                        style={{ padding: '10px 14px', background: 'rgba(245,158,11,0.06)', border: '1px solid var(--warning-border)', borderRadius: '8px', fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}
+                      >
+                        <div>
+                          <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{inv.user?.full_name || inv.user?.email || 'Unknown'}</p>
+                          <p style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>Pending since {new Date(inv.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <button onClick={() => handleRevokeInvite(inv.id)} disabled={actionLoading} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '11px', color: 'var(--danger)' }}>Revoke</button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {isLeader && otherMembers.length > 0 && (
+                <div style={{ marginBottom: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                  <label style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Transfer Leadership</label>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <select value={transferToUserId} onChange={(e) => setTransferToUserId(e.target.value)} className="premium-input">
+                      <option value="">Select a member…</option>
+                      {otherMembers.map((m) => <option key={m.id} value={m.id}>{m.full_name || m.email}</option>)}
+                    </select>
+                    <button onClick={handleTransferLeadership} disabled={!transferToUserId || actionLoading} className="btn btn-secondary" style={{ padding: '0 16px' }}>Transfer</button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', paddingTop: '16px', borderTop: '1px solid var(--border-color)' }}>
+                <div>
+                  {isLeader ? (
+                    confirmDisband ? (
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--danger)', fontWeight: 600 }}>Disband permanently?</span>
+                        <button onClick={handleDisbandTeam} disabled={actionLoading} className="btn btn-danger" style={{ padding: '8px 14px', fontSize: '12px' }}>Yes, disband</button>
+                        <button onClick={() => setConfirmDisband(false)} className="btn btn-secondary" style={{ padding: '8px 14px', fontSize: '12px' }}>Cancel</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setConfirmDisband(true)} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px', color: 'var(--danger)' }}>Disband Team</button>
+                    )
+                  ) : (
+                    <button onClick={handleLeaveTeam} disabled={actionLoading} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px', color: 'var(--danger)' }}>Leave Team</button>
+                  )}
+                </div>
+                <button
+                  onClick={() => { setShowManageModal(false); setConfirmDisband(false); setConfirmRemoveUserId(null) }}
+                  className="btn btn-secondary"
+                  style={{ padding: '10px 24px' }}
+                >
+                  Close
+                </button>
               </div>
             </div>
-            <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '12px' }}>Active Members ({teamMembers.length})</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '180px', overflowY: 'auto', marginBottom: '24px' }}>
-              {teamMembers.map((m) => (
-                <div key={m.id} style={{ padding: '10px 14px', background: 'rgba(0,0,0,0.01)', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '13px' }}>
-                  <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{m.full_name || 'No Name'}</p>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>{m.email}</p>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowManageModal(false)} className="btn btn-secondary" style={{ padding: '10px 24px' }}>Close</button>
-            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {showSubmissionModal && (
         <SubmissionModal
