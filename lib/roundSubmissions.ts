@@ -3,13 +3,27 @@
 // or embeds (the app only ever opens these in a new tab: rel="noopener noreferrer").
 
 const PRESENTATION_HOSTS = [
-  'drive.google.com',
+  // Google
   'docs.google.com',
+  'drive.google.com',
   'slides.google.com',
+  // Canva
+  'canva.com',
+  'canva.link',
+  'canva.site',
+  // Microsoft
   'onedrive.live.com',
   '1drv.ms',
-  'canva.com',
+  'sharepoint.com',
+  'office.com',
+  'live.com',
+  // Dropbox
   'dropbox.com',
+  'db.tt',
+  // Other common pitch-deck tools
+  'figma.com',
+  'pitch.com',
+  'gamma.app',
 ]
 
 function hostAllowed(host: string, allowlist: string[]): boolean {
@@ -31,12 +45,19 @@ function parseHttpsUrl(raw: string, maxLen: number): { ok: true; url: string; ho
   return { ok: true, url: value, host: parsed.hostname }
 }
 
-/** Round 1: PPT link. Google Drive/Slides, OneDrive, Canva, or Dropbox only, https, max 500 chars. */
+/**
+ * Round 1: PPT/deck link. https only, exact-domain-or-subdomain match against PRESENTATION_HOSTS
+ * (never substring-on-the-full-string — "canva.com.evil.io" and "evil-canva.com" both correctly
+ * fail hostAllowed's `h === allowed || h.endsWith('.' + allowed)` check), max 500 chars.
+ */
 export function validatePresentationUrl(raw: string): { ok: true; url: string } | { ok: false; message: string } {
   const parsed = parseHttpsUrl(raw, 500)
   if (parsed.ok === false) return parsed
   if (!hostAllowed(parsed.host, PRESENTATION_HOSTS)) {
-    return { ok: false, message: 'Link must be a Google Drive, Google Slides, OneDrive, Canva, or Dropbox link.' }
+    return {
+      ok: false,
+      message: "Please paste a share link from Google Drive/Slides, Canva, OneDrive, Dropbox, Figma, Pitch or Gamma. Make sure access is set to \"Anyone with the link can view\".",
+    }
   }
   return { ok: true, url: parsed.url }
 }

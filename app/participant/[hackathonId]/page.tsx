@@ -159,6 +159,10 @@ export default function HackathonDetailPage() {
   }
 
   const status: RegistrationStatusValue = registration?.status || 'not_registered'
+  // A hackathon "uses rounds" once the admin has set a Round 1 deadline (the admin edit form
+  // field that turns the rounds flow on) — used only to decide whether the legacy generic
+  // "Submit Project" button should still show alongside RoundsPanel, or hide in favor of it.
+  const usesRounds = !!hackathon?.round1_deadline
 
   const handleRegister = async () => {
     setActionLoading(true)
@@ -608,9 +612,14 @@ export default function HackathonDetailPage() {
 
         {status === 'team_created' && (
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button onClick={() => setShowSubmissionModal(true)} className="btn btn-primary" style={{ padding: '12px 28px' }}>
-              Submit Project
-            </button>
+            {/* Legacy generic submission — hidden once this hackathon uses the Round 1/Round 2
+                flow (Round 1 deadline set), since the RoundsPanel below already replaces it and
+                showing both would give participants two different "submit" buttons. */}
+            {!usesRounds && (
+              <button onClick={() => setShowSubmissionModal(true)} className="btn btn-primary" style={{ padding: '12px 28px' }}>
+                Submit Project
+              </button>
+            )}
             <button onClick={() => setShowManageModal(true)} className="btn btn-secondary" style={{ padding: '12px 20px' }}>
               Manage Team
             </button>
@@ -619,9 +628,11 @@ export default function HackathonDetailPage() {
 
         {status === 'submitted' && (
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button onClick={() => setShowSubmissionModal(true)} className="btn btn-secondary" style={{ padding: '12px 28px' }}>
-              <ShieldCheck size={16} /> View Submission
-            </button>
+            {!usesRounds && (
+              <button onClick={() => setShowSubmissionModal(true)} className="btn btn-secondary" style={{ padding: '12px 28px' }}>
+                <ShieldCheck size={16} /> View Submission
+              </button>
+            )}
             <button onClick={() => setShowManageModal(true)} className="btn btn-secondary" style={{ padding: '12px 20px' }}>
               Manage Team
             </button>
