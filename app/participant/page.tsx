@@ -202,8 +202,10 @@ export default function ParticipantDashboard() {
             {invites.map((inv) => (
               <div key={inv.id} className="glass-card" style={{ padding: '18px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                 <div>
-                  <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{inv.team?.team_name || 'A team'}</p>
-                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>invited you to join for {inv.hackathon?.name || 'a hackathon'}</p>
+                  <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {inv.inviter?.full_name || inv.inviter?.email || 'Someone'} invited you to join team {inv.team?.team_name || 'their team'}
+                  </p>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>for {inv.hackathon?.name || 'a hackathon'}</p>
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button
