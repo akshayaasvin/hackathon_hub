@@ -55,6 +55,13 @@ export async function POST(request: Request) {
         {
           team_id: registration.team_id,
           hackathon_id: hackathonId,
+          // This route predates Phase 4's round-based submissions (Round 1 presentation_url /
+          // Round 2 demo — see app/api/submissions/round1 and .../round2) and is kept as-is for
+          // any hackathon still using the original single generic submission. Explicitly
+          // round: 1 because the unique constraint this upsert relies on is now (team_id,
+          // round), not team_id alone (migration 0031) — a bare onConflict: 'team_id' would no
+          // longer match any constraint.
+          round: 1,
           project_title: projectTitle,
           problem_statement: body.problem_statement || null,
           solution: body.solution || null,
@@ -66,7 +73,7 @@ export async function POST(request: Request) {
           status: 'submitted',
           submitted_at: now,
         },
-        { onConflict: 'team_id' }
+        { onConflict: 'team_id,round' }
       )
       .select()
       .single()

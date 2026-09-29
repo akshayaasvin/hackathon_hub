@@ -16,6 +16,8 @@ const emptyHackathonForm = {
   start_date: '',
   end_date: '',
   registration_deadline: '',
+  round1_deadline: '',
+  round2_deadline: '',
   max_team_size: 5,
   registration_fee: ''
 }
@@ -159,6 +161,8 @@ export default function AdminDashboard() {
       start_date: toDatetimeLocalValue(h.start_date),
       end_date: toDatetimeLocalValue(h.end_date),
       registration_deadline: toDatetimeLocalValue(h.registration_deadline),
+      round1_deadline: toDatetimeLocalValue(h.round1_deadline),
+      round2_deadline: toDatetimeLocalValue(h.round2_deadline),
       max_team_size: h.max_team_size ?? 5,
       registration_fee: h.registration_fee != null ? String(h.registration_fee) : '',
     })
@@ -176,6 +180,8 @@ export default function AdminDashboard() {
     const startDate = formData.start_date ? new Date(formData.start_date).toISOString() : null
     const endDate = formData.end_date ? new Date(formData.end_date).toISOString() : null
     const regDeadline = formData.registration_deadline ? new Date(formData.registration_deadline).toISOString() : null
+    const round1Deadline = formData.round1_deadline ? new Date(formData.round1_deadline).toISOString() : null
+    const round2Deadline = formData.round2_deadline ? new Date(formData.round2_deadline).toISOString() : null
 
     let bannerUrl: string | null = existingBannerUrl
     if (bannerFile) {
@@ -203,6 +209,8 @@ export default function AdminDashboard() {
       start_date: startDate,
       end_date: endDate,
       registration_deadline: regDeadline,
+      round1_deadline: round1Deadline,
+      round2_deadline: round2Deadline,
       max_team_size: Number(formData.max_team_size),
       banner_url: bannerUrl,
       registration_fee: formData.registration_fee ? Number(formData.registration_fee) : null,
@@ -430,6 +438,16 @@ export default function AdminDashboard() {
           </div>
         </button>
 
+        <button onClick={() => router.push('/admin/rounds')} className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', textAlign: 'left', cursor: 'pointer', border: '1px solid rgba(20, 184, 166, 0.15)', background: 'rgba(20, 184, 166, 0.02)', padding: '20px', width: '100%', fontFamily: 'inherit' }}>
+          <div style={{ background: 'rgba(20, 184, 166, 0.1)', padding: '10px', borderRadius: '10px', color: '#0d9488' }}>
+            <Play size={20} />
+          </div>
+          <div>
+            <h4 style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '15px', margin: 0 }}>Rounds &amp; Shortlisting</h4>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '2px', margin: 0 }}>Pitch sessions, Round 1/2, publish</p>
+          </div>
+        </button>
+
         <button onClick={() => router.push('/admin/announcements')} className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', textAlign: 'left', cursor: 'pointer', border: '1px solid rgba(249, 115, 22, 0.15)', background: 'rgba(249, 115, 22, 0.02)', padding: '20px', width: '100%', fontFamily: 'inherit' }}>
           <div style={{ background: 'rgba(249, 115, 22, 0.1)', padding: '10px', borderRadius: '10px', color: '#ea580c' }}>
             <Megaphone size={20} />
@@ -507,17 +525,41 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Registration Deadline *</label>
-                <input 
-                  type="datetime-local" 
-                  name="registration_deadline" 
-                  value={formData.registration_deadline} 
-                  onChange={handleChange} 
-                  required 
-                  className="premium-input" 
+                <input
+                  type="datetime-local"
+                  name="registration_deadline"
+                  value={formData.registration_deadline}
+                  onChange={handleChange}
+                  required
+                  className="premium-input"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>
+                  Round 1 Deadline <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(PPT link + team changes lock after this)</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  name="round1_deadline"
+                  value={formData.round1_deadline}
+                  onChange={handleChange}
+                  className="premium-input"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>
+                  Round 2 Deadline <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(demo submission locks after this)</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  name="round2_deadline"
+                  value={formData.round2_deadline}
+                  onChange={handleChange}
+                  className="premium-input"
                 />
               </div>
             </div>
-            
+
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px', color: 'var(--text-secondary)' }}>Rules</label>
               <textarea

@@ -47,6 +47,17 @@ export async function POST(request: Request) {
       return apiError(`Cannot create a team from status "${registration.status}". Waiting for admin approval.`, 400)
     }
 
+    // Case/whitespace-insensitive duplicate check (Phase 2) — a friendly message up front;
+    // the unique index from migration 0029 (hackathon_id, lower(trim(team_name))) is the real
+    // guarantee and also catches a race between two simultaneous creates, caught below.
+    const { data: existingTeam } = await admin
+      .from('teams')
+      .select('id')
+      .eq('hackathon_id', hackathonId)
+      .ilike('team_name', teamName.trim())
+      .maybeSingle()
+    if (existingTeam) return apiError('Team name already taken in this hackathon.', 409)
+
     const { data: team, error: teamError } = await admin
       .from('teams')
       .insert({ team_name: teamName, hackathon_id: hackathonId, team_lead_id: user.id })
@@ -54,6 +65,7 @@ export async function POST(request: Request) {
       .single()
 
     if (teamError || !team) {
+      if ((teamError as any)?.code === '23505') return apiError('Team name already taken in this hackathon.', 409)
       console.error('[teams] team insert failed:', teamError)
       return apiError(teamError?.message || 'Could not create team.', 500)
     }

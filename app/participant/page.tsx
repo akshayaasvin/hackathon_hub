@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Calendar, Video } from 'lucide-react'
+import { Calendar, Mail, Video } from 'lucide-react'
 import WebinarList from '@/components/webinar/WebinarList'
 import { withTimeout } from '@/lib/utils'
 import { RegistrationStatusChip, type RegistrationStatusValue } from '@/components/participant/RegistrationStatusChip'
+import { postJson } from '@/lib/apiFetch'
 
 export default function ParticipantDashboard() {
   const [user, setUser] = useState<any>(null)
@@ -17,6 +18,60 @@ export default function ParticipantDashboard() {
 
   const [showWinnerAlert, setShowWinnerAlert] = useState(false)
   const [winnerMessage, setWinnerMessage] = useState('')
+
+  // Phase 3: pending team invites (Dashboard + notification bell). "Leave <team> to join?"
+  // is a real inline confirmation rather than window.confirm — this app overrides
+  // window.confirm to always auto-return true (see app/layout.tsx), so a native confirm()
+  // here would silently do nothing to protect against an accidental team switch.
+  const [invites, setInvites] = useState<any[]>([])
+  const [invitesLoading, setInvitesLoading] = useState(true)
+  const [respondingInviteId, setRespondingInviteId] = useState<string | null>(null)
+  const [switchPrompt, setSwitchPrompt] = useState<{
+    inviteId: string
+    newTeamName: string
+    currentTeamName: string
+    isSoloLeader: boolean
+  } | null>(null)
+
+  const loadInvites = async () => {
+    setInvitesLoading(true)
+    try {
+      const res = await fetch('/api/team-invites/mine').then((r) => r.json())
+      setInvites(res?.success ? res.data?.invites || [] : [])
+    } catch {
+      setInvites([])
+    } finally {
+      setInvitesLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadInvites()
+  }, [])
+
+  const respondToInvite = async (inviteId: string, action: 'accept' | 'decline', forceLeaveCurrent = false) => {
+    setRespondingInviteId(inviteId)
+    const res: any = await postJson(`/api/team-invites/${inviteId}/${action}`, forceLeaveCurrent ? { forceLeaveCurrent: true } : {})
+    setRespondingInviteId(null)
+    if (!res.success) {
+      if (res.code === 'ALREADY_ON_TEAM') {
+        const invite = invites.find((i) => i.id === inviteId)
+        setSwitchPrompt({
+          inviteId,
+          newTeamName: invite?.team?.team_name || 'this team',
+          currentTeamName: res.currentTeamName,
+          isSoloLeader: !!res.isSoloLeader,
+        })
+        return
+      }
+      alert(res.message)
+      return
+    }
+    alert(res.message)
+    setSwitchPrompt(null)
+    await loadInvites()
+    await loadData()
+  }
 
   const router = useRouter()
   const supabase = createClient()
@@ -137,6 +192,67 @@ export default function ParticipantDashboard() {
         <h1 style={{ fontSize: '32px', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>Participant Dashboard</h1>
         <p style={{ color: 'var(--text-secondary)' }}>Welcome back, <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{user?.email}</span>. Track your registrations, teams, and submissions.</p>
       </div>
+
+      {!invitesLoading && invites.length > 0 && (
+        <div style={{ marginBottom: '40px' }}>
+          <h2 style={{ fontSize: '20px', marginBottom: '16px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Mail size={20} color="var(--primary)" /> Team Invites
+          </h2>
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {invites.map((inv) => (
+              <div key={inv.id} className="glass-card" style={{ padding: '18px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                <div>
+                  <p style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{inv.team?.team_name || 'A team'}</p>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>invited you to join for {inv.hackathon?.name || 'a hackathon'}</p>
+                </div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    onClick={() => respondToInvite(inv.id, 'decline')}
+                    disabled={respondingInviteId === inv.id}
+                    className="btn btn-secondary"
+                    style={{ padding: '8px 16px', fontSize: '13px' }}
+                  >
+                    Decline
+                  </button>
+                  <button
+                    onClick={() => respondToInvite(inv.id, 'accept')}
+                    disabled={respondingInviteId === inv.id}
+                    className="btn btn-primary"
+                    style={{ padding: '8px 16px', fontSize: '13px' }}
+                  >
+                    {respondingInviteId === inv.id ? 'Working…' : 'Accept'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {switchPrompt && (
+        <div className="modal-overlay">
+          <div className="glass-card" style={{ width: '100%', maxWidth: '440px', padding: '32px' }}>
+            <h3 style={{ fontSize: '18px', marginBottom: '12px' }}>Switch teams?</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px', lineHeight: 1.6 }}>
+              You're already in <strong>{switchPrompt.currentTeamName}</strong> for this hackathon.
+              {switchPrompt.isSoloLeader
+                ? ` Since you're the only member, accepting will disband "${switchPrompt.currentTeamName}" and add you to "${switchPrompt.newTeamName}".`
+                : ` Leave "${switchPrompt.currentTeamName}" and join "${switchPrompt.newTeamName}" instead?`}
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={() => setSwitchPrompt(null)} className="btn btn-secondary" style={{ padding: '8px 16px' }}>Cancel</button>
+              <button
+                onClick={() => respondToInvite(switchPrompt.inviteId, 'accept', true)}
+                disabled={respondingInviteId === switchPrompt.inviteId}
+                className="btn btn-primary"
+                style={{ padding: '8px 20px' }}
+              >
+                {respondingInviteId === switchPrompt.inviteId ? 'Switching…' : 'Leave & Join'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <h2 style={{ fontSize: '20px', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
         <Calendar size={20} color="var(--secondary)" /> Open Hackathons
