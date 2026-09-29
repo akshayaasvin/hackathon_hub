@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
 import { canModifyTeamMembership } from '@/lib/teamGuards'
+import { sendEmail } from '@/lib/email'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -121,14 +122,33 @@ export async function POST(request: Request, { params }: { params: { teamId: str
       .single()
     if (insertError) throw insertError
 
+    const { data: leader } = await admin.from('users').select('full_name, email').eq('id', user.id).maybeSingle()
+    const leaderName = leader?.full_name || leader?.email || 'Your team leader'
+    const invitedName = invitedUser.full_name || invitedUser.email
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/+$/, '')
+    const hackathonLink = siteUrl ? `${siteUrl}/participant/${team.hackathon_id}` : ''
+
     await admin.from('notifications').insert({
       user_id: invitedUser.id,
       title: 'Team invite',
-      message: `You've been invited to join "${team.team_name}" for ${hackathon.name}. Accept or decline from your Dashboard.`,
+      message: `${leaderName} invited you to join "${team.team_name}" for ${hackathon.name}. Accept or decline from your Dashboard.`,
       type: 'team_invite',
     })
 
-    return apiSuccess({ inviteId: invite.id }, `Invite sent to ${invitedUser.full_name || invitedUser.email}.`)
+    await sendEmail({
+      to: invitedUser.email,
+      subject: `Team invite — ${hackathon.name}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+          <p>Hi ${invitedName},</p>
+          <p><b>${leaderName}</b> invited you to team <b>${team.team_name}</b> in <b>${hackathon.name}</b>.</p>
+          <p>Open your Dashboard to accept.</p>
+          ${hackathonLink ? `<p><a href="${hackathonLink}" style="display:inline-block;background:#6C47FF;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Open Hackathon Page</a></p>` : ''}
+        </div>
+      `,
+    }).catch((err) => console.error('[teams/invite] invite email failed (non-fatal):', err))
+
+    return apiSuccess({ inviteId: invite.id }, `Invite sent to ${invitedName}. They'll see it on their Dashboard.`)
   } catch (err: any) {
     console.error('[teams/invite] unhandled error:', err)
     return apiError('Something went wrong. Please try again.', 500)

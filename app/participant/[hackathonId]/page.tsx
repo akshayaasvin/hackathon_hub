@@ -10,6 +10,7 @@ import { RegistrationStatusChip, type RegistrationStatusValue } from '@/componen
 import { openRazorpayCheckout, verifyPaymentOnServer, type RazorpayCheckoutResult } from '@/components/RazorpayCheckout'
 import { SubmissionModal, type SubmissionFormValues } from '@/components/participant/SubmissionModal'
 import RoundsPanel from '@/components/participant/RoundsPanel'
+import HackathonInstructions from '@/components/participant/HackathonInstructions'
 
 export default function HackathonDetailPage() {
   const params = useParams()
@@ -44,6 +45,19 @@ export default function HackathonDetailPage() {
   const [confirmRemoveUserId, setConfirmRemoveUserId] = useState<string | null>(null)
   const [transferToUserId, setTransferToUserId] = useState('')
 
+  // P1: Team step three-choice flow (Leader / Solo / Member-waiting) — 'waiting' is the only
+  // one that needs its own local flag; Leader opens the existing Create Team modal, Solo calls
+  // its own route immediately.
+  const [teamChoice, setTeamChoice] = useState<'ask' | 'waiting'>('ask')
+  const [myInvitesHere, setMyInvitesHere] = useState<any[]>([])
+  const [respondingInviteId, setRespondingInviteId] = useState<string | null>(null)
+  const [switchPrompt, setSwitchPrompt] = useState<{
+    inviteId: string
+    newTeamName: string
+    currentTeamName: string
+    isSoloLeader: boolean
+  } | null>(null)
+
   useEffect(() => {
     loadData()
   }, [hackathonId])
@@ -74,6 +88,17 @@ export default function HackathonDetailPage() {
         .maybeSingle()
       setRegistration(registrationData)
 
+      // Invites addressed to ME for THIS hackathon (Team step state A) — only relevant before
+      // I have a team, but harmless to fetch regardless.
+      let myInvitesRes: any = null
+      try {
+        const r = await fetch(`/api/team-invites/mine?hackathonId=${encodeURIComponent(hackathonId)}`)
+        myInvitesRes = await r.json()
+      } catch {
+        myInvitesRes = null
+      }
+      setMyInvitesHere(myInvitesRes?.success ? myInvitesRes.data.invites : [])
+
       if (registrationData?.team_id) {
         const { data: teamData } = await supabase.from('teams').select('*').eq('id', registrationData.team_id).single()
         setTeam(teamData)
@@ -86,20 +111,18 @@ export default function HackathonDetailPage() {
           setTeamMembers([])
         }
 
-        // Pending invites for this team — leader-only via RLS (team_invites_select_own, see
-        // migration 0030), so this simply returns empty for a non-leader member, which is fine
-        // since only the leader's Manage Team view renders the invite list/actions anyway.
-        const { data: invites } = await supabase
-          .from('team_invites')
-          .select('id, invited_user_id, created_at')
-          .eq('team_id', registrationData.team_id)
-          .eq('status', 'pending')
-        if (invites && invites.length > 0) {
-          const { data: invitedUsers } = await supabase.from('users').select('id, email, full_name').in('id', invites.map((i: any) => i.invited_user_id))
-          setPendingInvites(invites.map((i: any) => ({ ...i, user: invitedUsers?.find((u: any) => u.id === i.invited_user_id) })))
-        } else {
-          setPendingInvites([])
+        // Pending invites for this team, WITH the invitee's name/email already resolved
+        // server-side (P0 fix — see app/api/teams/[teamId]/invites/route.ts for why the old
+        // two-query client-side version always rendered "Unknown"). 403s harmlessly for a
+        // non-leader member, since only the leader's Manage Team view renders this list.
+        let invitesRes: any = null
+        try {
+          const r = await fetch(`/api/teams/${registrationData.team_id}/invites`)
+          invitesRes = await r.json()
+        } catch {
+          invitesRes = null
         }
+        setPendingInvites(invitesRes?.success ? invitesRes.data.invites.map((i: any) => ({ ...i, user: i.invitee })) : [])
 
         // round: 1 explicitly — a team can now have up to two submissions rows (one per
         // round, migration 0031), so an unfiltered .maybeSingle() here would error once a
@@ -266,6 +289,41 @@ export default function HackathonDetailPage() {
     setActionLoading(false)
   }
 
+  const handleParticipateSolo = async () => {
+    setActionLoading(true)
+    const result = await postJson('/api/teams/solo', { hackathonId })
+    setActionLoading(false)
+    if (!result.success) {
+      alert(result.message)
+      return
+    }
+    alert(result.message)
+    await loadData()
+  }
+
+  const respondToInviteHere = async (inviteId: string, action: 'accept' | 'decline', forceLeaveCurrent = false) => {
+    setRespondingInviteId(inviteId)
+    const res: any = await postJson(`/api/team-invites/${inviteId}/${action}`, forceLeaveCurrent ? { forceLeaveCurrent: true } : {})
+    setRespondingInviteId(null)
+    if (!res.success) {
+      if (res.code === 'ALREADY_ON_TEAM') {
+        const invite = myInvitesHere.find((i) => i.id === inviteId)
+        setSwitchPrompt({
+          inviteId,
+          newTeamName: invite?.team?.team_name || 'this team',
+          currentTeamName: res.currentTeamName,
+          isSoloLeader: !!res.isSoloLeader,
+        })
+        return
+      }
+      alert(res.message)
+      return
+    }
+    alert(res.message)
+    setSwitchPrompt(null)
+    await loadData()
+  }
+
   const handleInviteMember = async () => {
     if (!inviteEmail.trim()) {
       alert('Please enter an email')
@@ -428,6 +486,8 @@ export default function HackathonDetailPage() {
         )}
       </div>
 
+      <HackathonInstructions hackathon={hackathon} status={status} round={roundProgress} />
+
       {/* Primary action area */}
       <div className="glass-card" style={{ marginBottom: '24px' }}>
         <h3 style={{ fontSize: '16px', marginBottom: '16px' }}>Next Step</h3>
@@ -480,16 +540,70 @@ export default function HackathonDetailPage() {
         )}
 
         {status === 'approved' && (
-          <div>
-            <button onClick={() => setShowTeamModal(true)} disabled={actionLoading} className="btn btn-success" style={{ padding: '12px 28px' }}>
-              Create Team
-            </button>
-            {registration?.payment_reference && (
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '10px' }}>
-                Payment reference: <span style={{ fontFamily: 'monospace' }}>{registration.payment_reference}</span>
+          myInvitesHere.length > 0 ? (
+            // State A: has a pending invite (or several) for THIS hackathon.
+            <div style={{ display: 'grid', gap: '12px' }}>
+              {myInvitesHere.map((inv) => (
+                <div key={inv.id} style={{ padding: '16px 18px', border: '1px solid var(--border-hover)', borderRadius: '10px', background: 'rgba(108,71,255,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                  <p style={{ fontSize: '14px' }}>
+                    <strong>{inv.inviter?.full_name || inv.inviter?.email || 'Someone'}</strong> invited you to join team{' '}
+                    <strong>{inv.team?.team_name || 'their team'}</strong> for {hackathon.name}.
+                  </p>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={() => respondToInviteHere(inv.id, 'decline')} disabled={respondingInviteId === inv.id} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>
+                      Decline
+                    </button>
+                    <button onClick={() => respondToInviteHere(inv.id, 'accept')} disabled={respondingInviteId === inv.id} className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }}>
+                      {respondingInviteId === inv.id ? 'Working…' : 'Accept'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : teamChoice === 'waiting' ? (
+            // State B, option 3: "I'm a Team Member" — nothing to create, just wait.
+            <div>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '12px' }}>
+                Your team leader will invite you using your registered email <strong>{user?.email}</strong>. Invites will
+                appear here and on your Dashboard.
               </p>
-            )}
-          </div>
+              <button onClick={() => setTeamChoice('ask')} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>
+                Back
+              </button>
+            </div>
+          ) : (
+            // State B: no team, no invite yet — three choices.
+            <div>
+              <div className="responsive-grid-3" style={{ gap: '16px', marginBottom: '16px' }}>
+                <div style={{ padding: '20px', border: '1px solid var(--border-color)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <h4 style={{ fontSize: '15px' }}>I&apos;m the Team Leader</h4>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', flex: 1 }}>Create a team and invite members by their registered email.</p>
+                  <button onClick={() => setShowTeamModal(true)} disabled={actionLoading} className="btn btn-success" style={{ padding: '10px 20px' }}>
+                    Create Team
+                  </button>
+                </div>
+                <div style={{ padding: '20px', border: '1px solid var(--border-color)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <h4 style={{ fontSize: '15px' }}>Participate Solo</h4>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', flex: 1 }}>No team name needed — you compete under your own name.</p>
+                  <button onClick={handleParticipateSolo} disabled={actionLoading} className="btn btn-secondary" style={{ padding: '10px 20px' }}>
+                    {actionLoading ? 'Starting…' : 'Participate Solo'}
+                  </button>
+                </div>
+                <div style={{ padding: '20px', border: '1px solid var(--border-color)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <h4 style={{ fontSize: '15px' }}>I&apos;m a Team Member</h4>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', flex: 1 }}>Waiting for your team leader to invite you.</p>
+                  <button onClick={() => setTeamChoice('waiting')} className="btn btn-secondary" style={{ padding: '10px 20px' }}>
+                    Waiting for Invite
+                  </button>
+                </div>
+              </div>
+              {registration?.payment_reference && (
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Payment reference: <span style={{ fontFamily: 'monospace' }}>{registration.payment_reference}</span>
+                </p>
+              )}
+            </div>
+          )
         )}
 
         {status === 'team_created' && (
@@ -517,6 +631,31 @@ export default function HackathonDetailPage() {
 
       {team && (status === 'team_created' || status === 'submitted') && (
         <RoundsPanel hackathonId={hackathonId} hackathon={hackathon} team={team} isLeader={team.team_lead_id === user?.id} />
+      )}
+
+      {switchPrompt && (
+        <div className="modal-overlay">
+          <div className="glass-card" style={{ width: '100%', maxWidth: '440px', padding: '32px' }}>
+            <h3 style={{ fontSize: '18px', marginBottom: '12px' }}>Switch teams?</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px', lineHeight: 1.6 }}>
+              You&apos;re already in <strong>{switchPrompt.currentTeamName}</strong> for this hackathon.
+              {switchPrompt.isSoloLeader
+                ? ` Since you're the only member, accepting will disband "${switchPrompt.currentTeamName}" and add you to "${switchPrompt.newTeamName}".`
+                : ` Leave "${switchPrompt.currentTeamName}" and join "${switchPrompt.newTeamName}" instead?`}
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button onClick={() => setSwitchPrompt(null)} className="btn btn-secondary" style={{ padding: '8px 16px' }}>Cancel</button>
+              <button
+                onClick={() => respondToInviteHere(switchPrompt.inviteId, 'accept', true)}
+                disabled={respondingInviteId === switchPrompt.inviteId}
+                className="btn btn-primary"
+                style={{ padding: '8px 20px' }}
+              >
+                {respondingInviteId === switchPrompt.inviteId ? 'Switching…' : 'Leave & Join'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Create Team Modal */}

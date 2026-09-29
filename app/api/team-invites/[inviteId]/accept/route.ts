@@ -53,7 +53,7 @@ export async function POST(request: Request, { params }: { params: { inviteId: s
 
     const { data: team, error: teamError } = await admin
       .from('teams')
-      .select('id, team_name, hackathon_id')
+      .select('id, team_name, hackathon_id, team_lead_id')
       .eq('id', invite.team_id)
       .maybeSingle()
     if (teamError) throw teamError
@@ -75,16 +75,15 @@ export async function POST(request: Request, { params }: { params: { inviteId: s
     if (registration.team_id && registration.team_id !== team.id) {
       const { data: currentTeam } = await admin
         .from('teams')
-        .select('id, team_name, team_lead_id')
+        .select('id, team_name, team_lead_id, is_solo')
         .eq('id', registration.team_id)
         .maybeSingle()
 
       if (currentTeam) {
-        const { count: currentTeamSize } = await admin
-          .from('team_members')
-          .select('id', { count: 'exact', head: true })
-          .eq('team_id', currentTeam.id)
-        const isSoloLeader = currentTeam.team_lead_id === user.id && (currentTeamSize ?? 0) <= 1
+        // A real solo team (created via "Participate Solo"), not a heuristic based on member
+        // count — a leader-created team that just happens to have no other members yet is a
+        // deliberate choice the leader made and is never silently auto-disbanded.
+        const isSoloLeader = currentTeam.team_lead_id === user.id && currentTeam.is_solo === true
 
         if (!forceLeaveCurrent) {
           return alreadyOnTeamResponse(
@@ -134,6 +133,14 @@ export async function POST(request: Request, { params }: { params: { inviteId: s
       .from('registrations')
       .update({ team_id: team.id, status: 'team_created' })
       .eq('id', registration.id)
+
+    const { data: acceptedBy } = await admin.from('users').select('full_name, email').eq('id', user.id).maybeSingle()
+    await admin.from('notifications').insert({
+      user_id: team.team_lead_id,
+      title: 'Invite accepted',
+      message: `${acceptedBy?.full_name || acceptedBy?.email || 'A member'} accepted your invite and joined "${team.team_name}".`,
+      type: 'team_invite',
+    })
 
     return apiSuccess({ teamId: team.id, teamName: team.team_name }, `You've joined "${team.team_name}".`)
   } catch (err: any) {
