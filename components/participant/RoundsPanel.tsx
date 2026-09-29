@@ -227,11 +227,14 @@ export default function RoundsPanel({
       )}
 
       {/* ── Final results (only once published) ── */}
-      {round2Published && round2Status && (round2Status.position || round2Status.special_mention) && (
-        <div className="glass-card" style={{ borderLeft: '4px solid var(--success)' }}>
+      {round2Published && round2Status && (
+        <div className="glass-card" style={{ borderLeft: `4px solid ${round2Status.position || round2Status.special_mention ? 'var(--success)' : 'var(--border-color)'}` }}>
           <h3 style={{ fontSize: '16px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}><Trophy size={16} /> Final Result</h3>
-          {round2Status.position && <p style={{ fontSize: '15px', fontWeight: 600 }}>Placed #{round2Status.position}!</p>}
-          {round2Status.special_mention && <p style={{ fontSize: '15px', fontWeight: 600 }}>Special Mention{round2Status.special_mention_label ? `: ${round2Status.special_mention_label}` : ''}</p>}
+          {round2Status.position && <p style={{ fontSize: '15px', fontWeight: 600 }}>🎉 Congratulations! Placed #{round2Status.position}!</p>}
+          {round2Status.special_mention && <p style={{ fontSize: '15px', fontWeight: 600 }}>🎉 Congratulations! Special Mention{round2Status.special_mention_label ? `: ${round2Status.special_mention_label}` : ''}</p>}
+          {!round2Status.position && !round2Status.special_mention && (
+            <p style={{ fontSize: '15px', color: 'var(--text-secondary)' }}>Thank you for participating. Final results are published — check the Results page for the full standings.</p>
+          )}
         </div>
       )}
     </div>

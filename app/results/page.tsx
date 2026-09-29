@@ -203,10 +203,19 @@ export default function ResultsPage() {
           </button>
           
           <h2 style={{ fontSize: '24px', marginBottom: '24px', fontFamily: 'var(--font-display)' }}>{selectedHackathon.name} - Standings</h2>
-          
-          {rankings.length === 0 ? (
+
+          {/*
+            Winners podium is driven entirely by the `winners` table and shown whenever it has
+            rows — independent of `rankings` (which comes from the OLD evaluations-based judge
+            scoring flow). A rounds-based hackathon (Admin Results tab's "Announce Winners")
+            never writes to `evaluations`, so gating the whole page behind `rankings.length` used
+            to hide the podium — and therefore the winners themselves — even after they'd been
+            announced. The leaderboard table below still needs `rankings`/`evaluations` and stays
+            gated on that separately.
+          */}
+          {rankings.length === 0 && winners.length === 0 ? (
             <div className="glass-card" style={{ textAlign: 'center', padding: '60px 40px', color: 'var(--text-secondary)' }}>
-              No evaluations have been submitted for this hackathon yet.
+              No results have been published for this hackathon yet.
             </div>
           ) : (
             <>
@@ -314,65 +323,69 @@ export default function ResultsPage() {
                 </div>
               )}
               
-              {/* Leaderboard Table */}
-               <h3 style={{ fontSize: '20px', marginBottom: '20px', fontFamily: 'var(--font-display)' }}>Hackathon Leaderboard</h3>
-              <div className="table-container fade-in">
-                <table className="premium-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '80px' }}>Rank</th>
-                      <th>Team Name</th>
-                      <th style={{ textAlign: 'center' }}>Total Score</th>
-                      <th style={{ textAlign: 'center' }}>Position</th>
-                      <th style={{ textAlign: 'center' }}>Prize Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rankings.map((team, index) => {
-                      const winner = winners.find(w => w.team_id === team.id)
-                      const isTop3 = index < 3
-                      const rank = index + 1
-                      const positionStr = rank === 1 ? '1st Place' : rank === 2 ? '2nd Place' : rank === 3 ? '3rd Place' : `${rank}th Place`
-                      
-                      return (
-                        <tr key={team.id}>
-                          <td>
-                            {index === 0 && '🥇'}
-                            {index === 1 && '🥈'}
-                            {index === 2 && '🥉'}
-                            {index > 2 && `${index + 1}`}
-                          </td>
-                          <td style={{ fontWeight: isTop3 ? 700 : 500, color: 'var(--text-primary)' }}>
-                            {team.team_name}
-                          </td>
-                          <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--primary)' }}>
-                            {team.total_score?.toFixed(2) || 0} / 100.00
-                          </td>
-                          <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)' }}>
-                            {positionStr}
-                          </td>
-                          <td style={{ textAlign: 'center', fontWeight: 600, color: winner ? 'var(--warning)' : 'var(--text-muted)' }}>
-                            {winner ? `$${winner.prize_amount}` : '-'}
-                          </td>
+              {/* Leaderboard Table — evaluations-based, so only shown once there's something to rank */}
+              {rankings.length > 0 && (
+                <>
+                  <h3 style={{ fontSize: '20px', marginBottom: '20px', fontFamily: 'var(--font-display)' }}>Hackathon Leaderboard</h3>
+                  <div className="table-container fade-in">
+                    <table className="premium-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: '80px' }}>Rank</th>
+                          <th>Team Name</th>
+                          <th style={{ textAlign: 'center' }}>Total Score</th>
+                          <th style={{ textAlign: 'center' }}>Position</th>
+                          <th style={{ textAlign: 'center' }}>Prize Amount</th>
                         </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              
-              {/* Declare Winners Button - Only show for Admin */}
-              {userRole === 'admin' && (
-                <div style={{ marginTop: '40px', textAlign: 'center' }}>
-                  <button 
-                    onClick={declareWinners}
-                    disabled={declaringWinner || winners.length > 0}
-                    className="btn btn-primary"
-                    style={{ padding: '14px 32px', fontSize: '16px' }}
-                  >
-                    {winners.length > 0 ? 'Winners Declared' : (declaringWinner ? 'Calculating Standings...' : 'Declare Final Winners')}
-                  </button>
-                </div>
+                      </thead>
+                      <tbody>
+                        {rankings.map((team, index) => {
+                          const winner = winners.find(w => w.team_id === team.id)
+                          const isTop3 = index < 3
+                          const rank = index + 1
+                          const positionStr = rank === 1 ? '1st Place' : rank === 2 ? '2nd Place' : rank === 3 ? '3rd Place' : `${rank}th Place`
+
+                          return (
+                            <tr key={team.id}>
+                              <td>
+                                {index === 0 && '🥇'}
+                                {index === 1 && '🥈'}
+                                {index === 2 && '🥉'}
+                                {index > 2 && `${index + 1}`}
+                              </td>
+                              <td style={{ fontWeight: isTop3 ? 700 : 500, color: 'var(--text-primary)' }}>
+                                {team.team_name}
+                              </td>
+                              <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--primary)' }}>
+                                {team.total_score?.toFixed(2) || 0} / 100.00
+                              </td>
+                              <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                {positionStr}
+                              </td>
+                              <td style={{ textAlign: 'center', fontWeight: 600, color: winner ? 'var(--warning)' : 'var(--text-muted)' }}>
+                                {winner ? `$${winner.prize_amount}` : '-'}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Declare Winners Button - Only show for Admin, and only for this evaluations-based flow */}
+                  {userRole === 'admin' && (
+                    <div style={{ marginTop: '40px', textAlign: 'center' }}>
+                      <button
+                        onClick={declareWinners}
+                        disabled={declaringWinner || winners.length > 0}
+                        className="btn btn-primary"
+                        style={{ padding: '14px 32px', fontSize: '16px' }}
+                      >
+                        {winners.length > 0 ? 'Winners Declared' : (declaringWinner ? 'Calculating Standings...' : 'Declare Final Winners')}
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
