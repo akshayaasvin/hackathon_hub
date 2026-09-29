@@ -25,7 +25,7 @@ alter table public.submissions drop constraint if exists submissions_team_id_key
 create unique index if not exists submissions_team_id_round_uniq on public.submissions (team_id, round);
 
 -- ── team_round_status: shortlist / attendance / score / position per team per round ──
-create table public.team_round_status (
+create table if not exists public.team_round_status (
   id uuid primary key default gen_random_uuid(),
   team_id uuid not null references public.teams(id) on delete cascade,
   hackathon_id uuid not null references public.hackathons(id) on delete cascade,
@@ -41,13 +41,14 @@ create table public.team_round_status (
   updated_at timestamptz not null default now(),
   unique (team_id, round)
 );
-create index team_round_status_hackathon_round_idx on public.team_round_status (hackathon_id, round);
+create index if not exists team_round_status_hackathon_round_idx on public.team_round_status (hackathon_id, round);
 
 alter table public.team_round_status enable row level security;
 
 -- Participants: read-only, and ONLY once the admin has published that round's results —
 -- "Before publish, participants must not see status" is enforced here, not just hidden by the
 -- UI, so a team member reading team_round_status directly still sees nothing pre-publish.
+drop policy if exists "team_round_status_select_published_team" on public.team_round_status;
 create policy "team_round_status_select_published_team" on public.team_round_status
   for select using (
     (
@@ -63,16 +64,18 @@ create policy "team_round_status_select_published_team" on public.team_round_sta
 -- session doesn't get to insert/update this table directly, so "publish" can never be flipped
 -- by anyone but an admin route, and a judge's own score can't retroactively rewrite a
 -- teammate's shortlist without going through validated server logic.
+drop policy if exists "team_round_status_select_jury" on public.team_round_status;
 create policy "team_round_status_select_jury" on public.team_round_status
   for select using (
     exists (select 1 from public.judge_assignments ja where ja.team_id = public.team_round_status.team_id and ja.judge_id = auth.uid())
   );
 
+drop policy if exists "team_round_status_admin_all" on public.team_round_status;
 create policy "team_round_status_admin_all" on public.team_round_status
   for all using (is_admin()) with check (is_admin());
 
 -- ── pitch_sessions / pitch_slots (Round 1 live pitch scheduling) ──
-create table public.pitch_sessions (
+create table if not exists public.pitch_sessions (
   id uuid primary key default gen_random_uuid(),
   hackathon_id uuid not null references public.hackathons(id) on delete cascade,
   title text not null,
@@ -84,9 +87,9 @@ create table public.pitch_sessions (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index pitch_sessions_hackathon_id_idx on public.pitch_sessions (hackathon_id);
+create index if not exists pitch_sessions_hackathon_id_idx on public.pitch_sessions (hackathon_id);
 
-create table public.pitch_slots (
+create table if not exists public.pitch_slots (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null references public.pitch_sessions(id) on delete cascade,
   team_id uuid not null references public.teams(id) on delete cascade,
@@ -96,8 +99,8 @@ create table public.pitch_slots (
   created_at timestamptz not null default now(),
   unique (session_id, team_id)
 );
-create index pitch_slots_session_id_idx on public.pitch_slots (session_id);
-create index pitch_slots_team_id_idx on public.pitch_slots (team_id);
+create index if not exists pitch_slots_session_id_idx on public.pitch_slots (session_id);
+create index if not exists pitch_slots_team_id_idx on public.pitch_slots (team_id);
 
 alter table public.pitch_sessions enable row level security;
 alter table public.pitch_slots enable row level security;
@@ -105,14 +108,17 @@ alter table public.pitch_slots enable row level security;
 -- Participants read only their own team's slot/session (never another team's), and only once
 -- their team has actually been invited (invite_sent_at is set) — before that, the session may
 -- still be a draft the admin is editing.
+drop policy if exists "pitch_slots_select_own_team" on public.pitch_slots;
 create policy "pitch_slots_select_own_team" on public.pitch_slots
   for select using (
     invite_sent_at is not null
     and exists (select 1 from public.team_members tm where tm.team_id = public.pitch_slots.team_id and tm.user_id = auth.uid())
   );
+drop policy if exists "pitch_slots_admin_all" on public.pitch_slots;
 create policy "pitch_slots_admin_all" on public.pitch_slots
   for all using (is_admin()) with check (is_admin());
 
+drop policy if exists "pitch_sessions_select_via_slot" on public.pitch_sessions;
 create policy "pitch_sessions_select_via_slot" on public.pitch_sessions
   for select using (
     exists (
@@ -121,6 +127,7 @@ create policy "pitch_sessions_select_via_slot" on public.pitch_sessions
       where ps.session_id = public.pitch_sessions.id and tm.user_id = auth.uid() and ps.invite_sent_at is not null
     )
   );
+drop policy if exists "pitch_sessions_select_jury" on public.pitch_sessions;
 create policy "pitch_sessions_select_jury" on public.pitch_sessions
   for select using (
     exists (
@@ -128,6 +135,7 @@ create policy "pitch_sessions_select_jury" on public.pitch_sessions
       where ja.hackathon_id = public.pitch_sessions.hackathon_id and ja.judge_id = auth.uid()
     )
   );
+drop policy if exists "pitch_sessions_admin_all" on public.pitch_sessions;
 create policy "pitch_sessions_admin_all" on public.pitch_sessions
   for all using (is_admin()) with check (is_admin());
 

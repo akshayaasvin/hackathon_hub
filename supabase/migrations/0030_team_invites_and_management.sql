@@ -7,7 +7,7 @@
 alter table public.hackathons add column if not exists round1_deadline timestamptz;
 
 -- ── team_invites: pending records, not instant adds ─────────────────────────────────────
-create table public.team_invites (
+create table if not exists public.team_invites (
   id uuid primary key default gen_random_uuid(),
   team_id uuid not null references public.teams(id) on delete cascade,
   hackathon_id uuid not null references public.hackathons(id) on delete cascade,
@@ -17,12 +17,12 @@ create table public.team_invites (
   created_at timestamptz not null default now(),
   responded_at timestamptz
 );
-create index team_invites_team_id_idx on public.team_invites (team_id);
-create index team_invites_invited_user_id_idx on public.team_invites (invited_user_id);
+create index if not exists team_invites_team_id_idx on public.team_invites (team_id);
+create index if not exists team_invites_invited_user_id_idx on public.team_invites (invited_user_id);
 
 -- Only one PENDING invite per (team, user) at a time — re-inviting after a decline/revoke is
 -- fine (a fresh row), but the same open invite can't be sent twice.
-create unique index team_invites_one_pending_per_team_user
+create unique index if not exists team_invites_one_pending_per_team_user
   on public.team_invites (team_id, invited_user_id)
   where status = 'pending';
 
@@ -42,8 +42,10 @@ $$;
 -- invites for their own team (Manage Team modal's "pending" list). No insert/update/delete
 -- policy for `authenticated` at all — every write (send/accept/decline/revoke) goes through a
 -- service-role route that re-validates eligibility, leader role, and deadlines first.
+drop policy if exists "team_invites_select_own" on public.team_invites;
 create policy "team_invites_select_own" on public.team_invites
   for select using (invited_user_id = auth.uid() or public.is_team_lead(team_id));
+drop policy if exists "team_invites_admin_all" on public.team_invites;
 create policy "team_invites_admin_all" on public.team_invites
   for all using (is_admin()) with check (is_admin());
 

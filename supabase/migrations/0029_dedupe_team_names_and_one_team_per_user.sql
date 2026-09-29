@@ -86,5 +86,13 @@ create trigger team_members_set_hackathon_id
 before insert on public.team_members
 for each row execute function public.set_team_member_hackathon_id();
 
-alter table public.team_members
-  add constraint team_members_hackathon_user_uniq unique (hackathon_id, user_id);
+-- Postgres has no `add constraint if not exists`; the exception handler is what makes this
+-- safe to re-run (e.g. after an earlier statement in this same file failed and the migration
+-- needs replaying from the top).
+do $$
+begin
+  alter table public.team_members
+    add constraint team_members_hackathon_user_uniq unique (hackathon_id, user_id);
+exception
+  when duplicate_object then null;
+end $$;
