@@ -433,18 +433,8 @@ export default function AdminDashboard() {
             <Trophy size={20} />
           </div>
           <div>
-            <h4 style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '15px', margin: 0 }}>View Results</h4>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '2px', margin: 0 }}>Leaderboards & Winners</p>
-          </div>
-        </button>
-
-        <button onClick={() => router.push('/admin/rounds')} className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '16px', textAlign: 'left', cursor: 'pointer', border: '1px solid rgba(20, 184, 166, 0.15)', background: 'rgba(20, 184, 166, 0.02)', padding: '20px', width: '100%', fontFamily: 'inherit' }}>
-          <div style={{ background: 'rgba(20, 184, 166, 0.1)', padding: '10px', borderRadius: '10px', color: '#0d9488' }}>
-            <Play size={20} />
-          </div>
-          <div>
-            <h4 style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '15px', margin: 0 }}>Rounds &amp; Shortlisting</h4>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '2px', margin: 0 }}>Pitch sessions, Round 1/2, publish</p>
+            <h4 style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '15px', margin: 0 }}>Results</h4>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '2px', margin: 0 }}>Pitch sessions, Round 1/2, shortlist, winners</p>
           </div>
         </button>
 

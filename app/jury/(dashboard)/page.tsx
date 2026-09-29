@@ -91,13 +91,24 @@ export default function JuryDashboardPage() {
                   {hackathon.description || 'No description provided.'}
                 </p>
               </div>
-              <button
-                onClick={() => router.push(`/jury/submissions?hackathon=${hackathon.id}`)}
-                className="btn btn-primary"
-                style={{ width: '100%', padding: '10px' }}
-              >
-                Evaluate Teams
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => router.push(`/jury/submissions?hackathon=${hackathon.id}`)}
+                  className="btn btn-primary"
+                  style={{ width: '100%', padding: '10px' }}
+                >
+                  Evaluate Teams
+                </button>
+                {hackathon.round1_deadline && (
+                  <button
+                    onClick={() => router.push(`/jury/rounds?hackathon=${hackathon.id}`)}
+                    className="btn btn-secondary"
+                    style={{ width: '100%', padding: '10px' }}
+                  >
+                    Score Rounds
+                  </button>
+                )}
+              </div>
             </div>
           ))
         )}

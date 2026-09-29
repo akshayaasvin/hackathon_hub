@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdminOrAssignedJudge } from '@/lib/requireHackathonStaff'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
 import { sendEmail } from '@/lib/email'
+import { logAdminAction } from '@/lib/auditLog'
 
 // "Publish Round 1 results" (admin only) — Phase 4, section D. Flips
 // hackathons.results_published_round1, which is the actual gate on team_round_status's RLS
@@ -38,8 +39,8 @@ export async function POST(_request: Request, { params }: { params: { id: string
       const { data: users } = await admin.from('users').select('id, email, full_name').in('id', userIds)
 
       const outcome = s.shortlisted
-        ? `Congratulations — "${team?.team_name || 'Your team'}" has been shortlisted for Round 2!`
-        : `"${team?.team_name || 'Your team'}" was not shortlisted for Round 2 this time.`
+        ? `🎉 Congratulations! Your team "${team?.team_name || 'Your team'}" is selected for Round 2. Watch your Dashboard for the demo meeting link.`
+        : `Thank you for participating. Your team "${team?.team_name || 'Your team'}" was not selected for Round 2.`
 
       await admin.from('notifications').insert(
         userIds.map((id) => ({
@@ -53,11 +54,17 @@ export async function POST(_request: Request, { params }: { params: { id: string
         await sendEmail({
           to: u.email,
           subject: `Round 1 results — ${hackathon.name}`,
-          html: `<p>Hi ${u.full_name || ''},</p><p>${outcome}</p>${s.shortlisted ? '<p>You can now submit for Round 2 from your Dashboard.</p>' : ''}`,
+          html: `<p>Hi ${u.full_name || ''},</p><p>${outcome}</p>`,
         })
       }
       notified += 1
     }
+
+    await logAdminAction(admin, staff.user.id, 'round1_published', params.id, {
+      shortlisted: (statuses ?? []).filter((s) => s.shortlisted).map((s) => s.team_id),
+      notShortlisted: (statuses ?? []).filter((s) => !s.shortlisted).map((s) => s.team_id),
+      notified,
+    })
 
     return apiSuccess({ notified }, 'Round 1 results published.')
   } catch (err) {

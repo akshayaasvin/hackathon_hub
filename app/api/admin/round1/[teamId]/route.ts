@@ -5,9 +5,9 @@ import { apiSuccess, apiError } from '@/lib/apiResponse'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const ATTENDANCE_VALUES = ['scheduled', 'presented', 'absent']
 
-// Admin/judge sets Round 1 attendance / score / remarks / shortlisted (Phase 4, section D).
-// Upserts team_round_status and, if a pitch slot exists for this team, mirrors attendance
-// into pitch_slots.status too so the two views of "did they show up" never disagree.
+// Admin-only: attendance / (admin's own overall) remarks / shortlisted. "Only admins can
+// shortlist... judges only score" — a judge's actual score goes through
+// app/api/rounds/score/[teamId] instead, which is the only thing judges can write here now.
 export async function PUT(request: Request, { params }: { params: { teamId: string } }) {
   try {
     if (!UUID_RE.test(params.teamId)) return apiError('Team not found.', 404)
@@ -18,7 +18,7 @@ export async function PUT(request: Request, { params }: { params: { teamId: stri
     if (!team) return apiError('Team not found.', 404)
 
     const staff = await requireAdminOrAssignedJudge(team.hackathon_id)
-    if (!staff) return apiError('Forbidden.', 403)
+    if (!staff?.isAdmin) return apiError('Forbidden — admin access required.', 403)
 
     let body: any
     try {
@@ -31,11 +31,6 @@ export async function PUT(request: Request, { params }: { params: { teamId: stri
     if (body.attendance !== undefined) {
       if (!ATTENDANCE_VALUES.includes(body.attendance)) return apiError('Invalid attendance value.', 400)
       patch.attendance = body.attendance
-    }
-    if (body.score !== undefined) {
-      const score = Number(body.score)
-      if (!Number.isFinite(score) || score < 0 || score > 100) return apiError('Score must be between 0 and 100.', 400)
-      patch.score = score
     }
     if (body.remarks !== undefined) patch.remarks = typeof body.remarks === 'string' ? body.remarks.slice(0, 2000) : null
     if (body.shortlisted !== undefined) patch.shortlisted = !!body.shortlisted

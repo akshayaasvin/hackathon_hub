@@ -13,10 +13,19 @@ export interface ApiResult<T = any> {
  * network error, empty body, or non-JSON response (e.g. an HTML error page).
  */
 export async function postJson<T = any>(url: string, body: unknown): Promise<ApiResult<T>> {
+  return sendJson<T>('POST', url, body)
+}
+
+/** Same as postJson, for routes that use PUT (e.g. the Round 1/2 admin update routes). */
+export async function putJson<T = any>(url: string, body: unknown): Promise<ApiResult<T>> {
+  return sendJson<T>('PUT', url, body)
+}
+
+async function sendJson<T = any>(method: 'POST' | 'PUT', url: string, body: unknown): Promise<ApiResult<T>> {
   let res: Response
   try {
     res = await fetch(url, {
-      method: 'POST',
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
