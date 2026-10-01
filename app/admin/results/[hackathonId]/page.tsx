@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { postJson, putJson } from '@/lib/apiFetch'
 import { formatDateTimeDMY_IST } from '@/lib/dates'
-import { ArrowLeft, Trophy, Video, FileText, Lock, CheckCircle2, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Trophy, Video, FileText, Lock, CheckCircle2, ExternalLink, Download } from 'lucide-react'
+import { ConfirmDialog } from '@/components/admin/ConfirmDialog'
+import { downloadXlsx, xlsxFilename, type XlsxColumn } from '@/lib/exportXlsx'
 
 const inputStyle = 'premium-input'
 const labelStyle = { display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' } as const
@@ -102,6 +104,8 @@ function Round1Tab({ hackathonId, hackathon, onPublishChange }: { hackathonId: s
   const [publishing, setPublishing] = useState(false)
   const [topN, setTopN] = useState('3')
   const [minScore, setMinScore] = useState('70')
+  const [confirmPublishOpen, setConfirmPublishOpen] = useState(false)
+  const [confirmUnpublishOpen, setConfirmUnpublishOpen] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -158,13 +162,8 @@ function Round1Tab({ hackathonId, hackathon, onPublishChange }: { hackathonId: s
     await load()
   }
 
-  const publish = async () => {
-    const selected = teams.filter((t) => draft[t.teamId]).length
-    const notSelected = teams.length - selected
-    if (!confirm(`Publish Round 1 results?\n\n${selected} team${selected === 1 ? '' : 's'} selected for Round 2.\n${notSelected} team${notSelected === 1 ? '' : 's'} not selected.\n\nParticipants will be notified by dashboard notification and email. This cannot be silently undone once Round 2 invites go out.`)) return
-    const unscored = teams.filter((t) => t.scoredJudgeCount === 0).length
-    if (unscored > 0 && !confirm(`${unscored} team${unscored === 1 ? ' has' : 's have'} no judge scores yet. Publish anyway?`)) return
-
+  const doPublish = async () => {
+    setConfirmPublishOpen(false)
     setPublishing(true)
     const res = await postJson(`/api/admin/hackathons/${hackathonId}/round1/publish`, {})
     setPublishing(false)
@@ -173,13 +172,25 @@ function Round1Tab({ hackathonId, hackathon, onPublishChange }: { hackathonId: s
     onPublishChange()
   }
 
-  const unpublish = async () => {
-    if (!confirm('Unpublish Round 1 results? Only possible if no Round 2 invites have been sent yet.')) return
+  const doUnpublish = async () => {
+    setConfirmUnpublishOpen(false)
     const res = await postJson(`/api/admin/hackathons/${hackathonId}/round1/unpublish`, {})
     if (!res.success) return alert(res.message)
     alert(res.message)
     onPublishChange()
   }
+
+  const exportColumns: XlsxColumn<any>[] = [
+    { header: 'Team', value: (t) => t.teamName },
+    { header: 'Leader', value: (t) => t.leaderName || '' },
+    { header: 'Members', value: (t) => t.memberCount },
+    { header: 'PPT Link', value: (t) => t.submission?.presentation_url || '' },
+    { header: 'Attendance', value: (t) => t.status?.attendance || '' },
+    { header: 'Scored / Assigned Judges', value: (t) => `${t.scoredJudgeCount}/${t.assignedJudgeCount}` },
+    { header: 'Average Score', value: (t) => t.averageScore ?? '' },
+    { header: 'Remarks', value: (t) => t.status?.remarks || '' },
+    { header: 'Shortlisted', value: (t) => (t.status?.shortlisted ? 'Yes' : 'No') },
+  ]
 
   if (loading) return <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading…</div>
 
@@ -196,18 +207,45 @@ function Round1Tab({ hackathonId, hackathon, onPublishChange }: { hackathonId: s
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button onClick={() => downloadXlsx(teams, exportColumns, xlsxFilename('round1-shortlist', hackathon.name))} disabled={teams.length === 0} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>
+            <Download size={14} /> Download XLSX
+          </button>
           <button onClick={saveDraft} disabled={savingDraft} className="btn btn-secondary" style={{ padding: '8px 18px' }}>
             {savingDraft ? 'Saving…' : 'Save Draft'}
           </button>
           {published ? (
-            <button onClick={unpublish} className="btn btn-secondary" style={{ padding: '8px 18px' }}>Unpublish</button>
+            <button onClick={() => setConfirmUnpublishOpen(true)} className="btn btn-secondary" style={{ padding: '8px 18px' }}>Unpublish</button>
           ) : (
-            <button onClick={publish} disabled={publishing} className="btn btn-success" style={{ padding: '8px 20px' }}>
+            <button onClick={() => setConfirmPublishOpen(true)} disabled={publishing} className="btn btn-success" style={{ padding: '8px 20px' }}>
               <CheckCircle2 size={14} /> {publishing ? 'Publishing…' : 'Publish Round 1 Results'}
             </button>
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmPublishOpen}
+        title="Publish Round 1 results?"
+        message={(() => {
+          const selected = teams.filter((t) => draft[t.teamId]).length
+          const notSelected = teams.length - selected
+          const unscored = teams.filter((t) => t.scoredJudgeCount === 0).length
+          return `${selected} team${selected === 1 ? '' : 's'} selected for Round 2.\n${notSelected} team${notSelected === 1 ? '' : 's'} not selected.${unscored > 0 ? `\n\n⚠ ${unscored} team${unscored === 1 ? ' has' : 's have'} no judge scores yet.` : ''}\n\nParticipants will be notified by dashboard notification and email.`
+        })()}
+        confirmLabel="Publish"
+        loading={publishing}
+        onConfirm={doPublish}
+        onCancel={() => setConfirmPublishOpen(false)}
+      />
+      <ConfirmDialog
+        open={confirmUnpublishOpen}
+        title="Unpublish Round 1 results?"
+        message="Only possible if no Round 2 invites have been sent yet. Participants will no longer see the Round 1 outcome."
+        confirmLabel="Unpublish"
+        danger
+        onConfirm={doUnpublish}
+        onCancel={() => setConfirmUnpublishOpen(false)}
+      />
 
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '20px', padding: '12px', background: 'rgba(2, 132, 199, 0.04)', borderRadius: '10px' }}>
         <span style={{ fontSize: '13px', fontWeight: 600 }}>Bulk select:</span>
@@ -302,6 +340,7 @@ function Round2Tab({ hackathonId, hackathon }: { hackathonId: string; hackathon:
   const [loading, setLoading] = useState(true)
   const [sessionForm, setSessionForm] = useState({ title: 'Round 2 — Demo Meeting', meetUrl: '', startsAt: '', durationMinutes: '30', notes: '' })
   const [savingSession, setSavingSession] = useState(false)
+  const [inviteChoice, setInviteChoice] = useState<{ sessionId: string; onlyTeamId?: string } | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -335,13 +374,34 @@ function Round2Tab({ hackathonId, hackathon }: { hackathonId: string; hackathon:
     await load()
   }
 
+  // A single team's "Resend/Invite" never auto-assigns (they already have, or are getting,
+  // one specific slot) — only the bulk "Send Round 2 Invites" needs to ask how slot times
+  // should be assigned, so it's the only path that opens the choice dialog below.
   const sendInvites = async (sessionId: string, onlyTeamId?: string) => {
-    const autoAssign = onlyTeamId ? false : confirm('Auto-assign a sequential time slot per team? Cancel to invite everyone to the same session time.')
+    if (onlyTeamId) {
+      await doSendInvites(sessionId, onlyTeamId, false)
+    } else {
+      setInviteChoice({ sessionId })
+    }
+  }
+
+  const doSendInvites = async (sessionId: string, onlyTeamId: string | undefined, autoAssign: boolean) => {
+    setInviteChoice(null)
     const res = await postJson(`/api/admin/pitch-sessions/${sessionId}/invite`, { onlyTeamId, autoAssignSlots: autoAssign })
     if (!res.success) return alert(res.message)
     alert(res.message)
     await load()
   }
+
+  const exportColumns: XlsxColumn<any>[] = [
+    { header: 'Team', value: (t) => t.teamName },
+    { header: 'Slot Time', value: (t) => (t.slotTime ? formatDateTimeDMY_IST(t.slotTime) : '') },
+    { header: 'GitHub', value: (t) => t.submission?.repo_link || '' },
+    { header: 'Live Demo', value: (t) => t.submission?.live_demo_url || '' },
+    { header: 'Demo Video', value: (t) => t.submission?.demo_video_url || '' },
+    { header: 'Submitted', value: (t) => (t.submission ? 'Yes' : 'No') },
+    { header: 'Invite Sent', value: (t) => (t.inviteSent ? 'Yes' : 'No') },
+  ]
 
   if (loading) return <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading…</div>
 
@@ -403,7 +463,12 @@ function Round2Tab({ hackathonId, hackathon }: { hackathonId: string; hackathon:
       </div>
 
       <div className="glass-card">
-        <h2 style={{ fontSize: '18px', marginBottom: '16px' }}>Shortlisted Teams</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+          <h2 style={{ fontSize: '18px' }}>Shortlisted Teams</h2>
+          <button onClick={() => downloadXlsx(teams, exportColumns, xlsxFilename('round2-demo-meeting', hackathon.name))} disabled={teams.length === 0} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>
+            <Download size={14} /> Download XLSX
+          </button>
+        </div>
         <div className="table-container">
           <table className="premium-table">
             <thead>
@@ -437,6 +502,22 @@ function Round2Tab({ hackathonId, hackathon }: { hackathonId: string; hackathon:
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '10px' }}>Resend/Invite above targets the most recently created session ({latestSession?.title}).</p>
         )}
       </div>
+
+      {inviteChoice && (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="glass-card fade-in" style={{ maxWidth: '480px', width: '100%', padding: '28px' }}>
+            <h3 style={{ fontSize: '18px', marginBottom: '12px', color: 'var(--text-primary)' }}>How should team slots be assigned?</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.6 }}>
+              Auto-assign gives each newly-invited team its own sequential time slot. Otherwise every team is invited to the same session start time.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '24px', flexWrap: 'wrap' }}>
+              <button onClick={() => setInviteChoice(null)} className="btn btn-secondary" style={{ padding: '10px 18px' }}>Cancel</button>
+              <button onClick={() => doSendInvites(inviteChoice.sessionId, undefined, false)} className="btn btn-secondary" style={{ padding: '10px 18px' }}>Same time for all</button>
+              <button onClick={() => doSendInvites(inviteChoice.sessionId, undefined, true)} className="btn btn-primary" style={{ padding: '10px 18px' }}>Auto-assign slots</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -457,6 +538,7 @@ function WinnersTab({ hackathonId, hackathon, onAnnounce }: { hackathonId: strin
   const [draft, setDraft] = useState<Record<string, { position: string; specialMentionLabel: string; remarks: string }>>({})
   const [savingDraft, setSavingDraft] = useState(false)
   const [announcing, setAnnouncing] = useState(false)
+  const [confirmAnnounceOpen, setConfirmAnnounceOpen] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -527,9 +609,8 @@ function WinnersTab({ hackathonId, hackathon, onAnnounce }: { hackathonId: strin
     await load()
   }
 
-  const announce = async () => {
-    const placedCount = teams.filter((t) => draft[t.teamId]?.position).length
-    if (!confirm(`Announce final winners?\n\n${placedCount} team${placedCount === 1 ? '' : 's'} placed. This publishes results and certificates to all participants and sends notifications/emails — save your draft first if you haven't.`)) return
+  const doAnnounce = async () => {
+    setConfirmAnnounceOpen(false)
     setAnnouncing(true)
     const res = await postJson(`/api/admin/hackathons/${hackathonId}/round2/publish`, {})
     setAnnouncing(false)
@@ -537,6 +618,18 @@ function WinnersTab({ hackathonId, hackathon, onAnnounce }: { hackathonId: strin
     alert(res.message)
     onAnnounce()
   }
+
+  const exportColumns: XlsxColumn<any>[] = [
+    { header: 'Team', value: (t) => t.teamName },
+    { header: 'Attendance', value: (t) => t.status?.attendance || '' },
+    { header: 'GitHub', value: (t) => t.submission?.repo_link || '' },
+    { header: 'Live Demo', value: (t) => t.submission?.live_demo_url || '' },
+    { header: 'Demo Video', value: (t) => t.submission?.demo_video_url || '' },
+    { header: 'Average Score', value: (t) => t.averageScore ?? '' },
+    { header: 'Remarks', value: (t) => t.status?.remarks || '' },
+    { header: 'Position', value: (t) => t.status?.position ?? '' },
+    { header: 'Special Mention', value: (t) => (t.status?.special_mention ? t.status?.special_mention_label || 'Yes' : '') },
+  ]
 
   if (loading) return <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading…</div>
 
@@ -550,13 +643,29 @@ function WinnersTab({ hackathonId, hackathon, onAnnounce }: { hackathonId: strin
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{announced ? <span style={{ color: 'var(--success)' }}>Announced</span> : 'Draft — not yet visible to participants'}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button onClick={() => downloadXlsx(teams, exportColumns, xlsxFilename('winners', hackathon.name))} disabled={teams.length === 0} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>
+            <Download size={14} /> Download XLSX
+          </button>
           <button onClick={suggestFromAverage} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>Suggest Top 3 from Average</button>
           <button onClick={saveDraft} disabled={savingDraft} className="btn btn-secondary" style={{ padding: '8px 18px' }}>{savingDraft ? 'Saving…' : 'Save Draft'}</button>
-          <button onClick={announce} disabled={announcing} className="btn btn-success" style={{ padding: '8px 20px' }}>
+          <button onClick={() => setConfirmAnnounceOpen(true)} disabled={announcing} className="btn btn-success" style={{ padding: '8px 20px' }}>
             <CheckCircle2 size={14} /> {announcing ? 'Announcing…' : 'Announce Winners'}
           </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmAnnounceOpen}
+        title="Announce final winners?"
+        message={(() => {
+          const placedCount = teams.filter((t) => draft[t.teamId]?.position).length
+          return `${placedCount} team${placedCount === 1 ? '' : 's'} placed. This publishes results and certificates to all participants and sends notifications/emails — save your draft first if you haven't.`
+        })()}
+        confirmLabel="Announce"
+        loading={announcing}
+        onConfirm={doAnnounce}
+        onCancel={() => setConfirmAnnounceOpen(false)}
+      />
 
       <div className="table-container">
         <table className="premium-table">

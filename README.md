@@ -26,9 +26,12 @@ works, the applicant just won't get an email (check server logs for the generate
    `jury_applications` staging tables that back the approval workflow (see Architecture notes below) and
    drops the now-redundant `approved_by`/`approved_at` columns from `college_profiles`/`jury_profiles`.
 2. **(Optional) Seed a sample hackathon.** Run `supabase/seed.sql` the same way.
-3. **Enable email confirmation.** In Supabase Dashboard → Authentication → Providers → Email, make sure
-   "Confirm email" is **ON**. This can't be set via SQL. Only participants need it — they're the only
-   role that gets an auth account at registration time.
+3. **"Confirm email" (Authentication → Providers → Email) no longer matters for this app.**
+   Participant registration creates the account via the admin API with `email_confirm: true`
+   (see `app/api/auth/register`), so no confirmation email is ever sent and this setting is
+   never consulted for that flow. College/jury accounts are also created via the admin API
+   (on admin approval), so the setting has no effect there either. You can leave it on or off —
+   nothing in the app depends on it.
 4. **Create your first admin.** There's no self-serve admin signup. Register normally as a participant,
    then in the Supabase SQL editor run:
    ```sql

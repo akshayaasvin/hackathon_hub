@@ -3,6 +3,37 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '../../../lib/supabase/client'
 import { Send, Search, Code, Video, FileText, ArrowUpRight } from 'lucide-react'
+import { useRowSelection } from '@/components/admin/useRowSelection'
+import { AdminTableToolbar, SelectCheckbox } from '@/components/admin/AdminTableToolbar'
+import { postJson } from '@/lib/apiFetch'
+import { xlsxFilename, type XlsxColumn } from '@/lib/exportXlsx'
+
+interface JoinedSubmission {
+  id: string
+  teamName: string
+  hackathonName: string
+  project_title?: string
+  solution?: string
+  problem_statement?: string
+  repo_link?: string
+  demo_video_url?: string
+  ppt?: string
+  pdf?: string
+  submitted_at: string
+  round?: number
+}
+
+const columns: XlsxColumn<JoinedSubmission>[] = [
+  { header: 'Team', value: (r) => r.teamName },
+  { header: 'Hackathon', value: (r) => r.hackathonName },
+  { header: 'Project Title', value: (r) => r.project_title || '' },
+  { header: 'Round', value: (r) => r.round ?? '' },
+  { header: 'Repository', value: (r) => r.repo_link || '' },
+  { header: 'Demo Video', value: (r) => r.demo_video_url || '' },
+  { header: 'PPT', value: (r) => r.ppt || '' },
+  { header: 'PDF', value: (r) => r.pdf || '' },
+  { header: 'Submitted At', value: (r) => new Date(r.submitted_at).toLocaleString() },
+]
 
 export default function AdminSubmissionsPage() {
   const [submissions, setSubmissions] = useState<any[]>([])
@@ -48,11 +79,18 @@ export default function AdminSubmissionsPage() {
     }
   }
 
-  const filtered = submissions.filter(sub => 
+  const filtered = submissions.filter(sub =>
     sub.project_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     sub.teamName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     sub.hackathonName?.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  const selection = useRowSelection(filtered, (s) => s.id)
+
+  const deleteSubmissions = async (rows: JoinedSubmission[]) => {
+    const res = await postJson('/api/admin/submissions/bulk-delete', { ids: rows.map((r) => r.id) })
+    return { success: res.success, message: res.message }
+  }
 
   if (loading) {
     return <div style={{ padding: '100px 20px', textAlign: 'center', fontSize: '18px', color: 'var(--text-secondary)' }}>Loading Submissions...</div>
@@ -65,10 +103,10 @@ export default function AdminSubmissionsPage() {
         <p style={{ color: 'var(--text-secondary)' }}>Review hackathon submissions, access repositories, and inspect uploaded files.</p>
       </div>
 
-      <div style={{ marginBottom: '32px', position: 'relative', maxWidth: '480px' }}>
-        <input 
-          placeholder="Search by team, project title, or hackathon..." 
-          value={searchQuery} 
+      <div style={{ marginBottom: '20px', position: 'relative', maxWidth: '480px' }}>
+        <input
+          placeholder="Search by team, project title, or hackathon..."
+          value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="premium-input"
           style={{ paddingLeft: '44px' }}
@@ -78,10 +116,25 @@ export default function AdminSubmissionsPage() {
         </div>
       </div>
 
+      <AdminTableToolbar
+        selectedCount={selection.selectedCount}
+        rowsForExport={selection.rowsForExport}
+        selectedRows={selection.selectedRows}
+        columns={columns}
+        filename={xlsxFilename('submissions', filtered[0]?.hackathonName)}
+        rowLabel={(r) => `${r.teamName} — ${r.project_title || 'Untitled'}`}
+        deleteNoun="submission"
+        onDeleteSelected={deleteSubmissions}
+        onDeleted={() => { selection.clear(); loadSubmissions() }}
+      />
+
       <div className="table-container fade-in">
         <table className="premium-table">
           <thead>
             <tr>
+              <th style={{ padding: 0 }}>
+                <SelectCheckbox checked={selection.isAllSelected} indeterminate={selection.isSomeSelected} onChange={selection.toggleAll} label="Select all submissions" />
+              </th>
               <th>Team & Hackathon</th>
               <th>Project Details</th>
               <th>Links & Attachments</th>
@@ -91,11 +144,14 @@ export default function AdminSubmissionsPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={4} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No submissions found.</td>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No submissions found.</td>
               </tr>
             ) : (
               filtered.map((sub) => (
                 <tr key={sub.id}>
+                  <td style={{ padding: 0 }}>
+                    <SelectCheckbox checked={selection.selectedIds.has(sub.id)} onChange={() => selection.toggle(sub.id)} label={`Select ${sub.teamName}`} />
+                  </td>
                   <td>
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{sub.teamName}</div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{sub.hackathonName}</div>

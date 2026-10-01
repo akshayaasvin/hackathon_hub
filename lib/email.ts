@@ -41,6 +41,50 @@ export function approvalEmailHtml({
   `
 }
 
+/**
+ * Sent once, right after a participant's account is created already-confirmed (no Supabase
+ * confirmation email goes out for this flow — see app/api/auth/register). The password is
+ * passed in from the same request that generated it and is never persisted anywhere; this
+ * function only ever renders it into this one email's HTML.
+ */
+export function welcomeParticipantEmailHtml({
+  fullName,
+  email,
+  password,
+  degree,
+  domain,
+  passoutYear,
+  contactNumber,
+  loginUrl,
+}: {
+  fullName: string
+  email: string
+  password: string
+  degree: string
+  domain: string
+  passoutYear: number
+  contactNumber: string
+  loginUrl: string
+}) {
+  return `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>Welcome to HackathonHub, ${fullName}!</h2>
+      <p>Your account is ready — here are your details and login credentials:</p>
+      <table style="border-collapse: collapse; margin: 16px 0;">
+        <tr><td style="padding: 4px 12px 4px 0;"><b>Name</b></td><td>${fullName}</td></tr>
+        <tr><td style="padding: 4px 12px 4px 0;"><b>Email (login ID)</b></td><td>${email}</td></tr>
+        <tr><td style="padding: 4px 12px 4px 0;"><b>Password</b></td><td>${password}</td></tr>
+        <tr><td style="padding: 4px 12px 4px 0;"><b>Degree</b></td><td>${degree}</td></tr>
+        <tr><td style="padding: 4px 12px 4px 0;"><b>Branch / Domain</b></td><td>${domain}</td></tr>
+        <tr><td style="padding: 4px 12px 4px 0;"><b>Passout Year</b></td><td>${passoutYear}</td></tr>
+        <tr><td style="padding: 4px 12px 4px 0;"><b>Contact Number</b></td><td>${contactNumber}</td></tr>
+      </table>
+      <p>Please log in and change your password from your profile page as soon as possible.</p>
+      <p><a href="${loginUrl}" style="display:inline-block;background:#6C47FF;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">Log In</a></p>
+    </div>
+  `
+}
+
 export function rejectionEmailHtml({ fullName, reason }: { fullName: string; reason?: string }) {
   return `
     <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">

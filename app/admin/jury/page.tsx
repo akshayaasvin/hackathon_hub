@@ -5,6 +5,30 @@ import { createClient } from '@/lib/supabase/client'
 import { Plus, Gavel, Mail, User, Trash2, Copy, CheckCircle2 } from 'lucide-react'
 import { adminCreateJurySchema } from '@/lib/validation'
 import { postJson } from '@/lib/apiFetch'
+import { useRowSelection } from '@/components/admin/useRowSelection'
+import { AdminTableToolbar, SelectCheckbox } from '@/components/admin/AdminTableToolbar'
+import { xlsxFilename, type XlsxColumn } from '@/lib/exportXlsx'
+
+const juryColumns: XlsxColumn<any>[] = [
+  { header: 'Name', value: (r) => r.full_name },
+  { header: 'Email', value: (r) => r.email },
+  { header: 'Occupation', value: (r) => r.profile?.occupation || '' },
+  { header: 'Status', value: (r) => r.status },
+  { header: 'Joined', value: (r) => new Date(r.created_at).toLocaleString() },
+]
+
+interface JoinedAssignment {
+  id: string
+  hackathonName: string
+  teamName: string
+  judgeName: string
+}
+
+const assignmentColumns: XlsxColumn<JoinedAssignment>[] = [
+  { header: 'Hackathon', value: (r) => r.hackathonName },
+  { header: 'Team', value: (r) => r.teamName },
+  { header: 'Jury Member', value: (r) => r.judgeName },
+]
 
 export default function AdminJuryPage() {
   const [juryList, setJuryList] = useState<any[]>([])
@@ -149,6 +173,24 @@ export default function AdminJuryPage() {
     setActionLoading(false)
   }
 
+  const jurySelection = useRowSelection(juryList, (j) => j.id)
+  const removeJuryMembers = async (rows: any[]) => {
+    const res = await postJson('/api/admin/jury/bulk-remove', { ids: rows.map((r) => r.id) })
+    return { success: res.success, message: res.message }
+  }
+
+  const assignmentRows: JoinedAssignment[] = assignments.map((a) => ({
+    id: a.id,
+    hackathonName: hackathons.find((h) => h.id === a.hackathon_id)?.name || '-',
+    teamName: teams.find((t) => t.id === a.team_id)?.team_name || '-',
+    judgeName: juryList.find((j) => j.id === a.judge_id)?.full_name || '-',
+  }))
+  const assignmentSelection = useRowSelection(assignmentRows, (a) => a.id)
+  const deleteAssignments = async (rows: JoinedAssignment[]) => {
+    const res = await postJson('/api/admin/judge-assignments/bulk-delete', { ids: rows.map((r) => r.id) })
+    return { success: res.success, message: res.message }
+  }
+
   if (loading) {
     return <div style={{ padding: '100px 20px', textAlign: 'center', fontSize: '18px', color: 'var(--text-secondary)' }}>Loading Jury Panel...</div>
   }
@@ -193,10 +235,24 @@ export default function AdminJuryPage() {
         </button>
       </div>
 
+      <AdminTableToolbar
+        selectedCount={jurySelection.selectedCount}
+        rowsForExport={jurySelection.rowsForExport}
+        selectedRows={jurySelection.selectedRows}
+        columns={juryColumns}
+        filename={xlsxFilename('jury', null)}
+        rowLabel={(r: any) => r.full_name || r.email}
+        deleteNoun="jury member"
+        onDeleteSelected={removeJuryMembers}
+        onDeleted={() => { jurySelection.clear(); loadAll() }}
+      />
       <div className="table-container fade-in" style={{ marginBottom: '48px' }}>
         <table className="premium-table">
           <thead>
             <tr>
+              <th style={{ padding: 0 }}>
+                <SelectCheckbox checked={jurySelection.isAllSelected} indeterminate={jurySelection.isSomeSelected} onChange={jurySelection.toggleAll} label="Select all jury members" />
+              </th>
               <th>Name</th>
               <th>Email</th>
               <th>Occupation</th>
@@ -208,11 +264,14 @@ export default function AdminJuryPage() {
           <tbody>
             {juryList.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No jury members registered.</td>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No jury members registered.</td>
               </tr>
             ) : (
               juryList.map((j) => (
                 <tr key={j.id}>
+                  <td style={{ padding: 0 }}>
+                    <SelectCheckbox checked={jurySelection.selectedIds.has(j.id)} onChange={() => jurySelection.toggle(j.id)} label={`Select ${j.full_name}`} />
+                  </td>
                   <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{ background: 'rgba(236, 72, 153, 0.1)', padding: '6px', borderRadius: '8px', color: '#db2777' }}>
@@ -276,10 +335,24 @@ export default function AdminJuryPage() {
         </button>
       </div>
 
+      <AdminTableToolbar
+        selectedCount={assignmentSelection.selectedCount}
+        rowsForExport={assignmentSelection.rowsForExport}
+        selectedRows={assignmentSelection.selectedRows}
+        columns={assignmentColumns}
+        filename={xlsxFilename('judge-assignments', null)}
+        rowLabel={(r) => `${r.judgeName} → ${r.teamName}`}
+        deleteNoun="assignment"
+        onDeleteSelected={deleteAssignments}
+        onDeleted={() => { assignmentSelection.clear(); loadAll() }}
+      />
       <div className="table-container fade-in">
         <table className="premium-table">
           <thead>
             <tr>
+              <th style={{ padding: 0 }}>
+                <SelectCheckbox checked={assignmentSelection.isAllSelected} indeterminate={assignmentSelection.isSomeSelected} onChange={assignmentSelection.toggleAll} label="Select all assignments" />
+              </th>
               <th>Hackathon</th>
               <th>Team</th>
               <th>Jury Member</th>
@@ -289,14 +362,17 @@ export default function AdminJuryPage() {
           <tbody>
             {assignments.length === 0 ? (
               <tr>
-                <td colSpan={4} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No assignments yet.</td>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>No assignments yet.</td>
               </tr>
             ) : (
-              assignments.map((a) => (
+              assignmentRows.map((a) => (
                 <tr key={a.id}>
-                  <td>{hackathons.find((h) => h.id === a.hackathon_id)?.name || '-'}</td>
-                  <td>{teams.find((t) => t.id === a.team_id)?.team_name || '-'}</td>
-                  <td>{juryList.find((j) => j.id === a.judge_id)?.full_name || '-'}</td>
+                  <td style={{ padding: 0 }}>
+                    <SelectCheckbox checked={assignmentSelection.selectedIds.has(a.id)} onChange={() => assignmentSelection.toggle(a.id)} label={`Select ${a.judgeName}`} />
+                  </td>
+                  <td>{a.hackathonName}</td>
+                  <td>{a.teamName}</td>
+                  <td>{a.judgeName}</td>
                   <td>
                     <button onClick={() => handleUnassign(a.id)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '13px', color: 'var(--danger)' }}>
                       <Trash2 size={14} />

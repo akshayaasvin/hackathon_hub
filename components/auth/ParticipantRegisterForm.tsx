@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { FormField } from './FormField'
 import { participantRegisterSchema } from '@/lib/validation'
 import { postJson } from '@/lib/apiFetch'
@@ -17,7 +18,8 @@ function todayISODate(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: string, email: string) => void }) {
+export function ParticipantRegisterForm() {
+  const router = useRouter()
   const [form, setForm] = useState({
     full_name: '',
     email: '',
@@ -107,7 +109,19 @@ export function ParticipantRegisterForm({ onSuccess }: { onSuccess: (status: str
         setServerError(result.message)
         return
       }
-      onSuccess(result.data!.status, result.data!.email)
+      // The account is already created+confirmed server-side (see app/api/auth/register) —
+      // sign in with the same credentials right away so the session cookie is set, and go
+      // straight to the dashboard. No "check your email" screen, no separate login step.
+      const { error: signInError } = await createClient().auth.signInWithPassword({
+        email: form.email,
+        password: form.password,
+      })
+      if (signInError) {
+        console.error('[register] auto sign-in failed after successful registration:', signInError)
+        setServerError('Your account was created, but we could not sign you in automatically. Please log in.')
+        return
+      }
+      router.push('/participant')
     } finally {
       setLoading(false)
     }
