@@ -1,8 +1,7 @@
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { registerSchema, type CollegeRegisterInput, type JuryRegisterInput } from '@/lib/validation'
 import { apiSuccess, apiError } from '@/lib/apiResponse'
-import { sendEmail, applicationReceivedEmailHtml } from '@/lib/email'
+import { sendEmail, applicationReceivedEmailHtml, welcomeParticipantEmailHtml } from '@/lib/email'
 
 // Submits (or resubmits) a college/jury application to its staging table.
 // No auth.users account is created here — that only happens once an admin
@@ -81,40 +80,52 @@ export async function POST(request: Request) {
       return apiError('Something went wrong. Please try again later.', 500)
     }
 
-    // ── Participant: the only role that gets a real Supabase Auth account
-    // immediately (email confirmation drives the auto-activation trigger). ──
+    // ── Participant: created already-confirmed via the service-role admin API — no
+    // Supabase confirmation email goes out, and no "pending" email-confirmation state ever
+    // exists for this role. The client signs the participant in immediately after this
+    // succeeds (see ParticipantRegisterForm), so there is no login screen in between. ──
     if (input.role === 'participant') {
-      const supabase = await createClient()
       const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || new URL(request.url).origin).replace(/\/+$/, '')
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+
+      // createUser (not signUp) — this is the service-role admin API, not a session-scoped
+      // client, and email_confirm: true marks the account confirmed on creation rather than
+      // relying on the on_auth_email_confirmed trigger (which only ever fires on an UPDATE
+      // of email_confirmed_at, never on INSERT, so it would never fire here).
+      const { data: createData, error: createError } = await admin.auth.admin.createUser({
         email: input.email,
         password: input.password,
-        options: { emailRedirectTo: `${siteUrl}/login?confirmed=1` },
+        email_confirm: true,
+        user_metadata: {
+          full_name: input.full_name,
+          college_name: input.college_name,
+          passout_year: input.passout_year,
+          degree: input.degree,
+          domain: input.domain,
+          contact_number: input.contact_number,
+        },
       })
 
-      if (signUpError || !signUpData.user) {
+      if (createError || !createData.user) {
+        const alreadyExists = createError?.code === 'email_exists' || /already\s*regist/i.test(createError?.message || '')
         return apiError(
-          signUpError?.message && /already\s*regist/i.test(signUpError.message)
-            ? 'An account with this email already exists. Try logging in, or use "Forgot password" if you don\'t remember it.'
-            : signUpError?.message || 'Registration failed. Please try again.',
+          alreadyExists ? 'Email already registered — please log in.' : createError?.message || 'Registration failed. Please try again.',
           400
         )
       }
 
-      const userId = signUpData.user.id
+      const userId = createData.user.id
 
-      // Upsert, not insert: a database trigger may have already created a
-      // placeholder row (role=participant, status=pending) the instant
-      // auth.users got this id, before this code ever ran. `status` is
-      // deliberately omitted here — it starts (and stays) 'pending' until
-      // the participant confirms their email, at which point the
-      // `handle_auth_email_confirmed` trigger flips it to 'active'.
+      // Upsert, not insert: a database trigger may have already created a placeholder row
+      // (role=participant, status=pending) the instant createUser() ran, before this code
+      // got here. status is set to 'active' synchronously in this same request — there is
+      // no trigger-driven lag to wait out, unlike the old email-confirmation flow.
       const { error: usersError } = await admin.from('users').upsert(
         {
           id: userId,
           email: input.email,
           full_name: input.full_name,
           role: 'participant',
+          status: 'active',
         },
         { onConflict: 'id' }
       )
@@ -126,20 +137,12 @@ export async function POST(request: Request) {
         } catch {}
         return apiError(
           usersError.message.includes('duplicate') || usersError.code === '23505'
-            ? 'An account with this email already exists.'
+            ? 'Email already registered — please log in.'
             : 'Could not create account. Please try again.',
           500
         )
       }
 
-      // Upsert, not insert: re-submitting the same (still-unconfirmed) email is a normal
-      // thing to do — Supabase's signUp() above just resends the confirmation link for the
-      // SAME account instead of erroring, so this call sees the SAME userId again. A plain
-      // insert would then fail on the profile row the first attempt already created, and
-      // failing here must NEVER delete the auth account — the confirmation link already
-      // emailed to the participant points at it; deleting it breaks that link instead of
-      // just letting them click it (this is what previously turned into "Email link is
-      // invalid or has expired" after a second registration attempt).
       const { error: profileError } = await admin.from('participant_profiles').upsert(
         {
           user_id: userId,
@@ -171,12 +174,30 @@ export async function POST(request: Request) {
         return apiError('Could not save your profile details. Please try again in a moment.', 500)
       }
 
-      // With Supabase's "Confirm email" requirement ON (see README setup step 3), a brand
-      // new signUp() leaves email_confirmed_at null until the participant clicks the link —
-      // that's 'pending', not an error. Re-submitting the same unconfirmed email lands here
-      // too (a fresh confirmation link was just emailed), so 'pending' covers both cases.
-      const status = signUpData.user.email_confirmed_at ? 'active' : 'pending'
-      return apiSuccess({ role: 'participant', status, email: input.email }, 'Registration successful.')
+      // The password only ever exists in this request's closure (parsed from the request
+      // body above) — it is never written to any table, logged, or echoed back to the
+      // client below. If the email fails to send, registration still succeeds; the failure
+      // is logged without the password.
+      try {
+        await sendEmail({
+          to: input.email,
+          subject: 'Welcome to HackathonHub',
+          html: welcomeParticipantEmailHtml({
+            fullName: input.full_name,
+            email: input.email,
+            password: input.password,
+            degree: input.degree,
+            domain: input.domain,
+            passoutYear: input.passout_year,
+            contactNumber: input.contact_number,
+            loginUrl: `${siteUrl}/login`,
+          }),
+        })
+      } catch (emailErr) {
+        console.error('[register] welcome email failed to send for user', userId, emailErr)
+      }
+
+      return apiSuccess({ role: 'participant', status: 'active', email: input.email }, 'Registration successful.')
     }
 
     // ── College / Jury: staging-table application, no auth account yet. ──

@@ -5,6 +5,20 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { postJson } from '@/lib/apiFetch'
 import { Check, X, CreditCard, ShieldCheck } from 'lucide-react'
+import { useRowSelection } from '@/components/admin/useRowSelection'
+import { AdminTableToolbar, SelectCheckbox } from '@/components/admin/AdminTableToolbar'
+import { xlsxFilename, type XlsxColumn } from '@/lib/exportXlsx'
+
+const registrationColumns: XlsxColumn<any>[] = [
+  { header: 'Participant Name', value: (r) => r.participant?.full_name || '' },
+  { header: 'Participant Email', value: (r) => r.participant?.email || '' },
+  { header: 'Hackathon', value: (r) => r.hackathon?.name || '' },
+  { header: 'Amount', value: (r) => r.payment_amount ?? '' },
+  { header: 'Payment Reference', value: (r) => r.payment_reference || '' },
+  { header: 'Payment Method', value: (r) => r.payment_method || '' },
+  { header: 'Status', value: (r) => r.status },
+  { header: 'Registered At', value: (r) => new Date(r.registered_at).toLocaleString() },
+]
 
 export default function AdminRegistrationApprovalsPage() {
   const [rows, setRows] = useState<any[]>([])
@@ -43,6 +57,7 @@ export default function AdminRegistrationApprovalsPage() {
       supabase
         .from('registrations')
         .select('*')
+        .is('deleted_at', null)
         .eq('status', 'payment_submitted')
         .order('registered_at', { ascending: true }),
       // Razorpay webhook verified these directly (status skipped straight to
@@ -51,6 +66,7 @@ export default function AdminRegistrationApprovalsPage() {
       supabase
         .from('registrations')
         .select('*')
+        .is('deleted_at', null)
         .eq('payment_method', 'razorpay')
         .in('status', ['approved', 'team_created', 'submitted'])
         .order('reviewed_at', { ascending: false }),
@@ -98,6 +114,14 @@ export default function AdminRegistrationApprovalsPage() {
     }
   }
 
+  const pendingSelection = useRowSelection(rows, (r: any) => r.id)
+  const autoApprovedSelection = useRowSelection(autoApprovedRows, (r: any) => r.id)
+
+  const deleteRegistrations = async (selected: any[]) => {
+    const res = await postJson('/api/admin/registrations/bulk-delete', { ids: selected.map((r) => r.id) })
+    return { success: res.success, message: res.message }
+  }
+
   if (loading) {
     return <div style={{ padding: '100px 20px', textAlign: 'center', fontSize: '18px', color: 'var(--text-secondary)' }}>Loading Payment Approvals...</div>
   }
@@ -119,52 +143,71 @@ export default function AdminRegistrationApprovalsPage() {
           <p style={{ color: 'var(--text-secondary)' }}>No payments are currently awaiting review.</p>
         </div>
       ) : (
-        <div className="table-container fade-in">
-          <table className="premium-table">
-            <thead>
-              <tr>
-                <th>Participant</th>
-                <th>Hackathon</th>
-                <th>Amount</th>
-                <th>Payment Reference</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.participant?.full_name || 'Unnamed'}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{r.participant?.email}</div>
-                  </td>
-                  <td>{r.hackathon?.name || '-'}</td>
-                  <td>{r.payment_amount != null ? `₹${r.payment_amount}` : '-'}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>{r.payment_reference || '-'}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        onClick={() => handleAction(r.id, 'approve')}
-                        disabled={processingId === r.id}
-                        className="btn btn-success"
-                        style={{ padding: '6px 12px', fontSize: '13px' }}
-                      >
-                        <Check size={14} /> Approve
-                      </button>
-                      <button
-                        onClick={() => handleAction(r.id, 'reject')}
-                        disabled={processingId === r.id}
-                        className="btn btn-danger"
-                        style={{ padding: '6px 12px', fontSize: '13px' }}
-                      >
-                        <X size={14} /> Reject
-                      </button>
-                    </div>
-                  </td>
+        <>
+          <AdminTableToolbar
+            selectedCount={pendingSelection.selectedCount}
+            rowsForExport={pendingSelection.rowsForExport}
+            selectedRows={pendingSelection.selectedRows}
+            columns={registrationColumns}
+            filename={xlsxFilename('payment-approvals', rows[0]?.hackathon?.name)}
+            rowLabel={(r: any) => r.participant?.full_name || r.participant?.email || 'Unnamed'}
+            deleteNoun="registration"
+            onDeleteSelected={deleteRegistrations}
+            onDeleted={() => { pendingSelection.clear(); loadRegistrations() }}
+          />
+          <div className="table-container fade-in">
+            <table className="premium-table">
+              <thead>
+                <tr>
+                  <th style={{ padding: 0 }}>
+                    <SelectCheckbox checked={pendingSelection.isAllSelected} indeterminate={pendingSelection.isSomeSelected} onChange={pendingSelection.toggleAll} label="Select all pending payments" />
+                  </th>
+                  <th>Participant</th>
+                  <th>Hackathon</th>
+                  <th>Amount</th>
+                  <th>Payment Reference</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id}>
+                    <td style={{ padding: 0 }}>
+                      <SelectCheckbox checked={pendingSelection.selectedIds.has(r.id)} onChange={() => pendingSelection.toggle(r.id)} label={`Select ${r.participant?.full_name || 'registration'}`} />
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.participant?.full_name || 'Unnamed'}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{r.participant?.email}</div>
+                    </td>
+                    <td>{r.hackathon?.name || '-'}</td>
+                    <td>{r.payment_amount != null ? `₹${r.payment_amount}` : '-'}</td>
+                    <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>{r.payment_reference || '-'}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => handleAction(r.id, 'approve')}
+                          disabled={processingId === r.id}
+                          className="btn btn-success"
+                          style={{ padding: '6px 12px', fontSize: '13px' }}
+                        >
+                          <Check size={14} /> Approve
+                        </button>
+                        <button
+                          onClick={() => handleAction(r.id, 'reject')}
+                          disabled={processingId === r.id}
+                          className="btn btn-danger"
+                          style={{ padding: '6px 12px', fontSize: '13px' }}
+                        >
+                          <X size={14} /> Reject
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       <div style={{ margin: '48px 0 20px' }}>
@@ -182,33 +225,52 @@ export default function AdminRegistrationApprovalsPage() {
           No auto-approved Razorpay payments yet.
         </div>
       ) : (
-        <div className="table-container fade-in">
-          <table className="premium-table">
-            <thead>
-              <tr>
-                <th>Participant</th>
-                <th>Hackathon</th>
-                <th>Amount</th>
-                <th>Transaction ID</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {autoApprovedRows.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.participant?.full_name || 'Unnamed'}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{r.participant?.email}</div>
-                  </td>
-                  <td>{r.hackathon?.name || '-'}</td>
-                  <td>{r.payment_amount != null ? `₹${r.payment_amount}` : '-'}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>{r.payment_reference || '-'}</td>
-                  <td style={{ textTransform: 'capitalize' }}>{r.status.replace('_', ' ')}</td>
+        <>
+          <AdminTableToolbar
+            selectedCount={autoApprovedSelection.selectedCount}
+            rowsForExport={autoApprovedSelection.rowsForExport}
+            selectedRows={autoApprovedSelection.selectedRows}
+            columns={registrationColumns}
+            filename={xlsxFilename('auto-approved-payments', autoApprovedRows[0]?.hackathon?.name)}
+            rowLabel={(r: any) => r.participant?.full_name || r.participant?.email || 'Unnamed'}
+            deleteNoun="registration"
+            onDeleteSelected={deleteRegistrations}
+            onDeleted={() => { autoApprovedSelection.clear(); loadRegistrations() }}
+          />
+          <div className="table-container fade-in">
+            <table className="premium-table">
+              <thead>
+                <tr>
+                  <th style={{ padding: 0 }}>
+                    <SelectCheckbox checked={autoApprovedSelection.isAllSelected} indeterminate={autoApprovedSelection.isSomeSelected} onChange={autoApprovedSelection.toggleAll} label="Select all auto-approved payments" />
+                  </th>
+                  <th>Participant</th>
+                  <th>Hackathon</th>
+                  <th>Amount</th>
+                  <th>Transaction ID</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {autoApprovedRows.map((r) => (
+                  <tr key={r.id}>
+                    <td style={{ padding: 0 }}>
+                      <SelectCheckbox checked={autoApprovedSelection.selectedIds.has(r.id)} onChange={() => autoApprovedSelection.toggle(r.id)} label={`Select ${r.participant?.full_name || 'registration'}`} />
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.participant?.full_name || 'Unnamed'}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{r.participant?.email}</div>
+                    </td>
+                    <td>{r.hackathon?.name || '-'}</td>
+                    <td>{r.payment_amount != null ? `₹${r.payment_amount}` : '-'}</td>
+                    <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>{r.payment_reference || '-'}</td>
+                    <td style={{ textTransform: 'capitalize' }}>{r.status.replace('_', ' ')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   )

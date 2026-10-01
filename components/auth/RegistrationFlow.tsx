@@ -27,23 +27,10 @@ const roleMeta: Record<RegisterRole, { title: string; blurb: string; formTitle: 
   },
 }
 
-// Participant copy depends on whether Supabase already confirmed the email (rare — only
-// when the project has "Confirm email" turned off) or is waiting on the confirmation link,
-// which is the normal case (see README setup step 3) and also what a resubmitted,
-// still-unconfirmed registration returns (a fresh link was just emailed to the same address).
-function participantSuccessCopy(status: string, email: string): { title: string; body: string } {
-  if (status === 'active') {
-    return {
-      title: "You're registered!",
-      body: 'Your account is active — log in now to browse open hackathons, register, and build your team.',
-    }
-  }
-  return {
-    title: 'Check your email to confirm',
-    body: `We've sent a confirmation link to ${email}. Click it to activate your account, then come back and log in. Can't find it? Check spam, or fill in this form again to get a new link.`,
-  }
-}
-
+// Participant has no success card at all — ParticipantRegisterForm signs the new account in
+// and redirects straight to the dashboard itself, since the account is created already-
+// confirmed (see app/api/auth/register). College/jury still go through admin approval, so
+// they keep the "submitted for review" card below.
 const successCopy: Record<Exclude<RegisterRole, 'participant'>, { title: string; body: string }> = {
   college: {
     title: 'Submitted for review',
@@ -61,16 +48,11 @@ const successCopy: Record<Exclude<RegisterRole, 'participant'>, { title: string;
  */
 export function RegistrationFlow({ roles }: { roles: RegisterRole[] }) {
   const [role, setRole] = useState<RegisterRole | null>(roles.length === 1 ? roles[0] : null)
-  const [success, setSuccess] = useState<RegisterRole | null>(null)
-  const [participantResult, setParticipantResult] = useState<{ status: string; email: string } | null>(null)
+  const [success, setSuccess] = useState<Exclude<RegisterRole, 'participant'> | null>(null)
   const showSelector = roles.length > 1
   // Jury has its own sign-in entry point at /jury; everyone else uses the shared /login.
   const loginHref = (success ?? role) === 'jury' ? '/jury' : '/login'
-  const copy = success === 'participant' && participantResult
-    ? participantSuccessCopy(participantResult.status, participantResult.email)
-    : success && success !== 'participant'
-      ? successCopy[success]
-      : null
+  const copy = success ? successCopy[success] : null
 
   return (
     <div
@@ -167,14 +149,7 @@ export function RegistrationFlow({ roles }: { roles: RegisterRole[] }) {
           >
             {roleMeta[role].formTitle}
           </h2>
-          {role === 'participant' && (
-            <ParticipantRegisterForm
-              onSuccess={(status, email) => {
-                setParticipantResult({ status, email })
-                setSuccess('participant')
-              }}
-            />
-          )}
+          {role === 'participant' && <ParticipantRegisterForm />}
           {role === 'college' && <CollegeRegisterForm onSuccess={() => setSuccess('college')} />}
           {role === 'jury' && <JuryRegisterForm onSuccess={() => setSuccess('jury')} />}
         </div>
